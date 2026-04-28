@@ -2,7 +2,7 @@
 import { BrowserRouter } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import HomePage from './pages/HomePage';
-import './index.css'
+import './assets/css/index.css'
 
 
 function App() {

@@ -128,15 +128,13 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="home-hero">
         <div className="container">
-          <div className="hero-grid">
             <div className="hero-content">
               <div className="hero-badge">
                 <span className="badge-icon">⚡</span>
                 Summer Mega Sale
               </div>
               <h1 className="hero-title">
-                Premium <span className="hero-highlight">Electronics</span>
-                <br />at Best Prices
+                Premium <span className="hero-highlight">Electronics</span>at Best Prices
               </h1>
               <p className="hero-description">
                 Discover the latest tech gadgets, laptops, headphones, and smartwatches. 
@@ -168,20 +166,6 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
-            <div className="hero-image">
-              <div className="hero-image-wrapper">
-                <div className="hero-discount-card">
-                  <span className="discount-percent">40%</span>
-                  <span className="discount-text">OFF</span>
-                </div>
-                <img 
-                  src="https://placehold.co/500x500/3b82f6/white?text=Premium+Gadgets" 
-                  alt="Premium Electronics"
-                  className="hero-img"
-                />
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -281,32 +265,6 @@ export default function HomePage() {
                 onAddToCart={handleAddToCart}
               />
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Banner Section */}
-      <section className="banner-section">
-        <div className="container">
-          <div className="banner-content">
-            <div className="banner-text">
-              <span className="banner-badge">Limited Time Offer</span>
-              <h2>Apple AirPods Pro 2</h2>
-              <p>Active Noise Cancellation | Spatial Audio | 30hr Battery Life</p>
-              <div className="banner-price">
-                <span className="current-price">$199</span>
-                <span className="original-price">$249</span>
-              </div>
-              <Link to="/product/airpods-pro" className="banner-btn">
-                Shop Now
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-              </Link>
-            </div>
-            <div className="banner-image">
-              <img src="https://placehold.co/400x400/3b82f6/white?text=AirPods+Pro" alt="AirPods Pro" />
-            </div>
           </div>
         </div>
       </section>
