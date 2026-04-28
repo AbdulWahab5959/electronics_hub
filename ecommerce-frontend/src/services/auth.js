@@ -1,5 +1,22 @@
-import api from "./api";
+// src/services/auth.js
+import api, { refreshCSRF } from "./api";
 
-export const login = (data) => api.post("/login", data);
-export const logout = () => api.post("/logout");
-export const getUser = () => api.get("/api/user");
+const withCsrf = async (requestFn) => {
+  await refreshCSRF();
+  return requestFn();
+};
+
+export const register = async (userData) => {
+  return withCsrf(() => api.post("/register", userData));
+};
+
+export const login = async (credentials) => {
+  return withCsrf(() => api.post("/login", credentials));
+};
+
+export const logout = async () => {
+  await refreshCSRF();
+  return api.post("/logout");
+};
+
+export const getUser = () => api.get("/user");
