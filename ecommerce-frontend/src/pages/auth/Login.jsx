@@ -16,14 +16,25 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await login({ email, password });
+    try {
+      const result = await login({ email, password });
 
-    if (result.success) {
-      navigate('/dashboard');
-    } else {
-      setError(result.error || 'Login failed. Please check your credentials.');
+      if (result.success) {
+        navigate('/dashboard');
+      } else if (result.requires_verification) {
+        // Redirect to verify-email page with email in state
+        navigate('/verify-email', { 
+          state: { email: email },
+          replace: true 
+        });
+      } else {
+        setError(result.error || 'Login failed. Please check your credentials.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Login failed');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (

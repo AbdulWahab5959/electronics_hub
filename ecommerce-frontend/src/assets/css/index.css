@@ -4738,6 +4738,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
+  height: 100%;
   outline: none;
   border-right: 2px solid #e2e8f0;
   transition: background 0.3s;
@@ -7056,4 +7057,52 @@
     padding: 0.625rem;
     font-size: 0.75rem;
   }
+}
+/* ============================================ */
+/* VERIFICATION PROMPT
+/* ============================================ */
+
+.verification-prompt {
+  background: #fff3e0;
+  border: 1px solid #ffb74d;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.verification-prompt p {
+  color: #e65100;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.resend-btn {
+  background: #ff9800;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.resend-btn:hover:not(:disabled) {
+  background: #f57c00;
+  transform: translateY(-1px);
+}
+
+.resend-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-icon.success {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.auth-icon.error {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
 }
