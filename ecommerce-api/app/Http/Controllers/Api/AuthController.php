@@ -33,9 +33,6 @@ class AuthController extends Controller
         // Send email verification
         event(new Registered($user));
 
-        // Log the user in
-        Auth::login($user);
-        $request->session()->regenerate();
 
         return response()->json([
             'user' => $user,
@@ -108,6 +105,12 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Verification email sent! Please check your inbox.'
         ]);
+
+         \Log::info('Resend verification called', [
+        'is_authenticated' => (bool) $request->user(),
+        'input_email' => $request->email,
+        'all_input' => $request->all()
+    ]);
     }
 
     /**

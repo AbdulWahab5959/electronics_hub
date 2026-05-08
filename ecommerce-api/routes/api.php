@@ -13,10 +13,12 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 // Email Verification Routes (public but signed)
 Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
     ->name('verification.verify');
+Route::post('/email/resend', [AuthController::class, 'resendVerification']); 
 
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
-    Route::post('/email/resend', [AuthController::class, 'resendVerification']);
+    Route::get('/dashboard', [AuthController::class, 'dashboard']);
+
 });
