@@ -1,7 +1,7 @@
 // src/pages/auth/ResetPassword.jsx
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import api from '../../services/api';
+import { resetPassword } from '../../services/auth';
 
 export default function ResetPassword() {
   const { token } = useParams();
@@ -25,30 +25,24 @@ export default function ResetPassword() {
     setMessage('');
     setIsLoading(true);
 
+    // Validate passwords match
     if (formData.password !== formData.password_confirmation) {
       setError('Passwords do not match');
       setIsLoading(false);
       return;
     }
 
-    if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      await api.post('/reset-password', {
+      await resetPassword({
         email: formData.email,
         password: formData.password,
         password_confirmation: formData.password_confirmation,
         token
       });
-      
       setMessage('Password reset successful! Redirecting to login...');
       setTimeout(() => navigate('/login'), 2000);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Something went wrong. Please try again.');
+    } catch (error) {
+      setError(error.response?.data?.message || 'Failed to reset password. Please try again.');
     } finally {
       setIsLoading(false);
     }

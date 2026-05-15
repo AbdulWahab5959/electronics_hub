@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Breadcrumb } from '../components/common/Breadcrumb';
-import { useToast } from '../components/ui/ToastNotification';
+import { useToast } from '../components/common/ToastNotification';
 
 export default function ContactPage() {
   const showToast = useToast();

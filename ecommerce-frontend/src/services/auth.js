@@ -6,6 +6,7 @@ const withCsrf = async (requestFn) => {
   return requestFn();
 };
 
+// ========== REGISTRATION & LOGIN ==========
 export const register = async (userData) => {
   return withCsrf(() => api.post("/register", userData));
 };
@@ -20,3 +21,23 @@ export const logout = async () => {
 };
 
 export const getUser = () => api.get("/user");
+
+// ========== PASSWORD RESET ==========
+export const forgotPassword = async (email) => {
+  return withCsrf(() => api.post("/forgot-password", { email }));
+};
+
+export const resetPassword = async (data) => {
+  return withCsrf(() => api.post("/reset-password", data));
+};
+
+// ========== EMAIL VERIFICATION ==========
+export const verifyEmail = async (id, hash, expires, signature) => {
+  return api.get(`/email/verify/${id}/${hash}`, {
+    params: { expires, signature }
+  });
+};
+
+export const resendVerification = async () => {
+  return api.post("/email/resend");
+};

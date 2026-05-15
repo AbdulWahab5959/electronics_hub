@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { forgotPassword } from '../../services/auth';
+
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -10,21 +12,14 @@ export default function ForgotPassword() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setMessage('');
-    setError('');
-    setIsLoading(true);
-
-    try {
-      const response = await api.post('/forgot-password', { email });
-      setMessage(response.data.message || 'Reset link sent! Check your email.');
-      setEmail('');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Something went wrong. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  e.preventDefault();
+  try {
+    await forgotPassword(email);
+    setMessage('Reset link sent! Check your email.');
+  } catch (error) {
+    setError(error.response?.data?.message || 'Failed');
+  }
+};
 
   return (
     <div className="auth-page">

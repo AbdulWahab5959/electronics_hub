@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ProductCard } from '../components/common/ProductCard';
-import { ProductFilter } from '../components/shop/ProductFilter';
+import { ProductFilter } from '../components/common/ProductFilter';
 import { Pagination } from '../components/common/Pagination';
 import { Breadcrumb } from '../components/common/Breadcrumb';
 import { useCart } from '../hooks/useCart';
-import { useToast } from '../components/ui/ToastNotification';
+import { useToast } from '../components/common/ToastNotification';
 
 export default function ShopPage() {
   const [searchParams, setSearchParams] = useSearchParams();

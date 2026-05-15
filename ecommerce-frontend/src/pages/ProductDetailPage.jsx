@@ -6,7 +6,7 @@ import { QuantitySelector } from '../components/common/QuantitySelector';
 import { RatingStars } from '../components/common/RatingStars';
 import { ProductCard } from '../components/common/ProductCard';
 import { useCart } from '../hooks/useCart';
-import { useToast } from '../components/ui/ToastNotification';
+import { useToast } from '../components/common/ToastNotification';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
