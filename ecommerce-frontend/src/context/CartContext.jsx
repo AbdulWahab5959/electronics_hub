@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
-const CartContext = createContext();
+export const CartContext = createContext();
 
 export const useCart = () => {
   const context = useContext(CartContext);

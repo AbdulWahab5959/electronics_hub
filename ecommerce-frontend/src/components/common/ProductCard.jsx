@@ -1,4 +1,3 @@
-// src/components/common/ProductCard.jsx
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -19,8 +18,12 @@ export const ProductCard = ({
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
+  // ✅ Convert price and originalPrice to numbers (they may be strings from API)
+  const numericPrice = typeof price === 'string' ? parseFloat(price) : price;
+  const numericOriginalPrice = originalPrice ? (typeof originalPrice === 'string' ? parseFloat(originalPrice) : originalPrice) : null;
+
   // Calculate discount if not provided
-  const discountPercentage = discount || (originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
+  const discountPercentage = discount || (numericOriginalPrice ? Math.round(((numericOriginalPrice - numericPrice) / numericOriginalPrice) * 100) : 0);
   
   // Generate star rating
   const renderStars = () => {
@@ -107,14 +110,14 @@ export const ProductCard = ({
 
         {/* Price */}
         <div className="product-price-section">
-          {originalPrice && originalPrice > price ? (
+          {numericOriginalPrice && numericOriginalPrice > numericPrice ? (
             <>
-              <span className="current-price">${price.toFixed(2)}</span>
-              <span className="original-price">${originalPrice.toFixed(2)}</span>
-              <span className="saved-badge">Save ${(originalPrice - price).toFixed(2)}</span>
+              <span className="current-price">${numericPrice.toFixed(2)}</span>
+              <span className="original-price">${numericOriginalPrice.toFixed(2)}</span>
+              <span className="saved-badge">Save ${(numericOriginalPrice - numericPrice).toFixed(2)}</span>
             </>
           ) : (
-            <span className="current-price">${price.toFixed(2)}</span>
+            <span className="current-price">${numericPrice.toFixed(2)}</span>
           )}
         </div>
 
