@@ -5,27 +5,47 @@ import { useAuth } from '../../hooks/useAuth';
 export const Header = () => {
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
   const [isScrolled, setIsScrolled] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
     };
+
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    document.body.style.overflow =
+      isMobileMenuOpen || isSearchOpen ? 'hidden' : 'auto';
+
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [isMobileMenuOpen, isSearchOpen]);
+
+  const closeMenus = () => {
+    setIsMobileMenuOpen(false);
+    setIsSearchOpen(false);
+  };
+
   const handleLogout = async () => {
     await logout();
+    closeMenus();
     navigate('/login');
   };
 
   const handleSearch = (e) => {
     e.preventDefault();
+
     if (searchQuery.trim()) {
+      closeMenus();
       navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
   };
@@ -37,9 +57,29 @@ export const Header = () => {
     { name: 'Contact Us', path: '/contact' },
   ];
 
+  const Logo = () => (
+    <Link to="/" className="tech-logo" onClick={closeMenus}>
+      <div className="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+          <line x1="8" y1="21" x2="16" y2="21" />
+          <line x1="12" y1="17" x2="12" y2="21" />
+          <circle cx="8" cy="10" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="16" cy="10" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+      </div>
+
+      <div className="logo-text">
+        <span className="logo-main">
+          Tech<span className="logo-accent">Hub</span>
+        </span>
+        <span className="logo-tagline">Electronics Store</span>
+      </div>
+    </Link>
+  );
+
   return (
     <header className={`tech-header ${isScrolled ? 'header-scrolled' : ''}`}>
-      {/* Top Bar */}
       <div className="tech-top-bar">
         <div className="container">
           <div className="top-bar-content">
@@ -50,6 +90,7 @@ export const Header = () => {
               </span>
               <span className="marquee-icon">⚡</span>
             </div>
+
             <div className="top-bar-links">
               <Link to="/track-order">Track Order</Link>
               <Link to="/support">Support</Link>
@@ -59,43 +100,23 @@ export const Header = () => {
         </div>
       </div>
 
-      {/* Main Header (Logo + Actions) */}
       <div className="tech-main-header">
         <div className="container">
           <div className="main-header-content">
-            {/* Logo */}
-            <Link to="/" className="tech-logo">
-              <div className="logo-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                  <line x1="8" y1="21" x2="16" y2="21" />
-                  <line x1="12" y1="17" x2="12" y2="21" />
-                  <circle cx="8" cy="10" r="1.5" fill="currentColor" stroke="none" />
-                  <circle cx="16" cy="10" r="1.5" fill="currentColor" stroke="none" />
-                </svg>
-              </div>
-              <div className="logo-text">
-                <span className="logo-main">Tech<span className="logo-accent">Hub</span></span>
-                <span className="logo-tagline">Electronics Store</span>
-              </div>
-            </Link>
+            <Logo />
 
-            {/* Navigation Bar placed inside main header (as in your final code) */}
             <div className="tech-nav-bar">
-              <div className="container">
-                <nav className="tech-nav">
-                  <div className="nav-links">
-                    {navLinks.map((link) => (
-                      <Link key={link.name} to={link.path} className="nav-link">
-                        <span>{link.name}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </nav>
-              </div>
+              <nav className="tech-nav">
+                <div className="nav-links">
+                  {navLinks.map((link) => (
+                    <Link key={link.name} to={link.path} className="nav-link">
+                      <span>{link.name}</span>
+                    </Link>
+                  ))}
+                </div>
+              </nav>
             </div>
 
-            {/* Header Actions (Compare, Wishlist, Cart, User) */}
             <div className="tech-actions">
               <Link to="/compare" className="action-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -122,23 +143,34 @@ export const Header = () => {
                 <span className="action-label">Cart</span>
                 {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
               </Link>
+                 <button
+              type="button"
+              className="desktop-search-icon"
+              onClick={() => setIsSearchOpen(true)}
+              aria-label="Open search"
+            >
+              🔍
+            </button>
 
               {isAuthenticated ? (
                 <div className="user-menu">
-                  <button className="user-trigger">
-                    <div className="user-avatar">{user?.name?.charAt(0).toUpperCase()}</div>
+                  <button type="button" className="user-trigger">
+                    <div className="user-avatar">
+                      {user?.name?.charAt(0).toUpperCase()}
+                    </div>
                     <span className="user-name">{user?.name?.split(' ')[0]}</span>
                     <svg className="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M6 9l6 6 6-6" />
                     </svg>
                   </button>
+
                   <div className="user-dropdown">
-                    <Link to="/dashboard">Dashboard</Link>
-                    <Link to="/orders">My Orders</Link>
                     <Link to="/profile">Profile</Link>
                     <Link to="/support-tickets">Support Tickets</Link>
                     <hr />
-                    <button onClick={handleLogout}>Logout</button>
+                    <button type="button" onClick={handleLogout}>
+                      Logout
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -149,10 +181,11 @@ export const Header = () => {
               )}
             </div>
 
-            {/* Mobile Menu Trigger */}
             <button
+              type="button"
               className={`mobile-menu-trigger ${isMobileMenuOpen ? 'active' : ''}`}
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label="Open menu"
             >
               <span></span>
               <span></span>
@@ -162,73 +195,89 @@ export const Header = () => {
         </div>
       </div>
 
-      {/* Search Bar Section (below nav links) */}
-      <div className="search-bar-section">
-        <div className="container">
-          <form className="tech-search" onSubmit={handleSearch}>
-            <div className="search-category">
-              <select>
-                <option>All Categories</option>
-                <option>Laptops</option>
-                <option>Headphones</option>
-                <option>Smartwatches</option>
-                <option>Mouse</option>
-                <option>Keyboards</option>
-                <option>Gaming</option>
-              </select>
+      {isSearchOpen && (
+        <div className="search-overlay">
+          <div className="search-overlay-box">
+            <button
+              type="button"
+              className="search-close"
+              onClick={() => setIsSearchOpen(false)}
+            >
+              ✕
+            </button>
+
+            <form className="overlay-search-form" onSubmit={handleSearch}>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+
+              <button type="submit">Search</button>
+            </form>
+
+            <div className="search-suggestions">
+              <p>Popular Products</p>
+              <Link to="/shop?category=laptops" onClick={closeMenus}>Laptops</Link>
+              <Link to="/shop?category=headphones" onClick={closeMenus}>Headphones</Link>
+              <Link to="/shop?category=smartwatches" onClick={closeMenus}>Smartwatches</Link>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isMobileMenuOpen && (
+        <div
+          className="mobile-menu-overlay"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      <div className={`mobile-menu-panel ${isMobileMenuOpen ? 'open' : ''}`}>
+        <div className="mobile-menu-header">
+          <Logo />
+          <button type="button" onClick={() => setIsMobileMenuOpen(false)}>
+            ✕
+          </button>
+        </div>
+
+        <div className="mobile-search">
+          <form onSubmit={handleSearch}>
             <input
               type="text"
-              placeholder="Search for laptops, headphones, smartwatches..."
+              placeholder="Search electronics..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-            <button type="submit">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" />
-                <path d="M21 21l-4.35-4.35" />
-              </svg>
-            </button>
-          </form>
-        </div>
-      </div>
-      <div className="nav-featured">
-                    <Link to="/deals" className="nav-deals">🔥 Hot Deals</Link>
-                    <Link to="/new-arrivals" className="nav-new">✨ New Arrivals</Link>
-                  </div>
-
-      {/* Mobile Menu Panel */}
-      <div className={`mobile-menu-panel ${isMobileMenuOpen ? 'open' : ''}`}>
-        <div className="mobile-menu-header">
-          <div className="mobile-logo">TechHub</div>
-          <button onClick={() => setIsMobileMenuOpen(false)}>✕</button>
-        </div>
-        <div className="mobile-search">
-          <form onSubmit={handleSearch}>
-            <input type="text" placeholder="Search electronics..." />
             <button type="submit">🔍</button>
           </form>
         </div>
-        <div className="mobile-nav-links">
-          {navLinks.map((link) => (
-            <Link key={link.name} to={link.path} onClick={() => setIsMobileMenuOpen(false)}>
-              {link.name}
-            </Link>
-          ))}
+
+        <div className="mobile-section">
+          <Link to="/dashboard" onClick={closeMenus}>Dashboard</Link>
+          <Link to="/shop" onClick={closeMenus}>Shop</Link>
+          <Link to="/orders" onClick={closeMenus}>Orders</Link>
+          <Link to="/contact" onClick={closeMenus}>Contact Us</Link>
+          <Link to="/compare" onClick={closeMenus}>Compare Products</Link>
+          <Link to="/wishlist" onClick={closeMenus}>Wishlist</Link>
+          <Link to="/cart" onClick={closeMenus}>Cart</Link>
+          <Link to="/profile" onClick={closeMenus}>Profile</Link>
+          <Link to="/support-tickets" onClick={closeMenus}>Support Tickets</Link>
+          <Link to="/track-order" onClick={closeMenus}>Track Order</Link>
+          <Link to="/support" onClick={closeMenus}>Support</Link>
         </div>
-        <div className="mobile-featured">
-          <Link to="/deals" onClick={() => setIsMobileMenuOpen(false)}>🔥 Hot Deals</Link>
-          <Link to="/new-arrivals" onClick={() => setIsMobileMenuOpen(false)}>✨ New Arrivals</Link>
-          <Link to="/compare" onClick={() => setIsMobileMenuOpen(false)}>🔄 Compare Products</Link>
-          <Link to="/support" onClick={() => setIsMobileMenuOpen(false)}>🎧 Support</Link>
-        </div>
+
         <div className="mobile-auth">
           {isAuthenticated ? (
-            <button onClick={handleLogout}>Logout</button>
+            <button type="button" onClick={handleLogout}>
+              Logout
+            </button>
           ) : (
             <>
-              <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>Login</Link>
-              <Link to="/register" onClick={() => setIsMobileMenuOpen(false)}>Sign Up</Link>
+              <Link to="/login" onClick={closeMenus}>Login</Link>
+              <Link to="/register" onClick={closeMenus}>Sign Up</Link>
             </>
           )}
         </div>

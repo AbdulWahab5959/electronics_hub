@@ -7,6 +7,9 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use App\Notifications\CustomVerifyEmail;
 use App\Notifications\CustomResetPassword;
+use App\Models\Address;
+use App\Models\Cart;
+use App\Models\Wishlist;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
@@ -45,5 +48,26 @@ class User extends Authenticatable implements MustVerifyEmail
     public function sendPasswordResetNotification($token)
     {
         $this->notify(new CustomResetPassword($token));
+    }
+    public function addresses()
+    {
+        return $this->hasMany(Address::class);
+    }
+    // Cart items
+    public function cart()
+    {
+        return $this->hasMany(Cart::class);
+    }
+
+    // Wishlist items
+    public function wishlist()
+    {
+        return $this->hasMany(Wishlist::class);
+    }
+
+    // Orders
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
     }
 }

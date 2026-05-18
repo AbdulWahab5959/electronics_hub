@@ -213,7 +213,7 @@ export default function ProfilePage() {
           <h1>My Profile</h1>
           <p>Manage your account information</p>
         </div>
-        <div className="profile-layout">
+        <div className="profile-layout justifty-start">
           <aside className="profile-sidebar">
             <div className="profile-avatar">
               <div className="avatar-circle">{profileData.name?.charAt(0)?.toUpperCase() || 'U'}</div>
