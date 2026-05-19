@@ -39,6 +39,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::post('/change-password', [ProfileController::class, 'changePassword']);
+        Route::post('/user/avatar', [ProfileController::class, 'uploadAvatar']);
+
     
     // Addresses
     Route::get('/addresses', [ProfileController::class, 'addresses']);
@@ -67,7 +69,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
 // ============================================
 // PUBLIC PRODUCT ROUTES (No auth needed)
 // ============================================
+Route::get('/products/featured', [ProductController::class, 'featured']);
+Route::get('/products/new-arrivals', [ProductController::class, 'newArrivals']);
+Route::get('/products/best-selling', [ProductController::class, 'bestSelling']);
+
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{id}', [ProductController::class, 'show']);
+
 Route::get('/categories', [ProductController::class, 'categories']);
-Route::get('/products/featured', [ProductController::class, 'featured']);
+Route::get('/brands', [ProductController::class, 'brands']);

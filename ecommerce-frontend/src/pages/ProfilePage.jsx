@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/common/ToastNotification';
@@ -12,11 +12,13 @@ import {
   updateAddress,
   deleteAddress,
   setDefaultAddress,
+  uploadAvatar, // assume you have this API function
 } from '../services/user';
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
   const showToast = useToast();
+  const fileInputRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(false);
@@ -29,6 +31,10 @@ export default function ProfilePage() {
     phone: '',
     bio: '',
   });
+
+  // Profile image
+  const [profileImage, setProfileImage] = useState(null);   // File object
+  const [imagePreview, setImagePreview] = useState(null);    // data URL or existing URL
 
   // Password form
   const [passwordData, setPasswordData] = useState({
@@ -46,12 +52,12 @@ export default function ProfilePage() {
     address: '',
     city: '',
     state: '',
-    zip_code: '',      // ✅ matches backend column
+    zip_code: '',
     country: 'PK',
-    is_default: false, // ✅ matches backend column
+    is_default: false,
   });
 
-  // Order stats (still mock, can be replaced later)
+  // Order stats
   const [orderStats, setOrderStats] = useState({
     total: 0,
     delivered: 0,
@@ -64,24 +70,24 @@ export default function ProfilePage() {
     loadAddresses();
     loadOrderStats();
   }, []);
-
-  const loadProfile = async () => {
-    setIsLoading(true);
-    try {
-      const response = await getProfile();
-      const userData = response.data.data.user;
-      setProfileData({
-        name: userData.name || '',
-        email: userData.email || '',
-        phone: userData.phone || '',
-        bio: userData.bio || '',
-      });
-    } catch (error) {
-      showToast('Failed to load profile', 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const loadProfile = async () => {
+  setIsLoading(true);
+  try {
+    const response = await getProfile();
+    const userData = response.data.data.user;
+    setProfileData({
+      name: userData.name || '',
+      email: userData.email || '',
+      phone: userData.phone || '',
+      bio: userData.bio || '',
+    });
+    setImagePreview(userData.avatar_url || null); // use full URL
+  } catch (error) {
+    showToast('Failed to load profile', 'error');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const loadAddresses = async () => {
     try {
@@ -93,7 +99,6 @@ export default function ProfilePage() {
   };
 
   const loadOrderStats = () => {
-    // TODO: replace with real API call to /orders/stats
     const orders = JSON.parse(localStorage.getItem('orders') || '[]');
     const delivered = orders.filter(o => o.status === 'delivered');
     const pending = orders.filter(o => o.status === 'pending' || o.status === 'processing');
@@ -105,13 +110,32 @@ export default function ProfilePage() {
     });
   };
 
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setProfileImage(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     setIsSaving(true);
     try {
+      // 1. Upload avatar if new image selected
+      if (profileImage) {
+        const formData = new FormData();
+        formData.append('avatar', profileImage);
+        await uploadAvatar(formData);
+        // After upload, reload to get updated avatar URL
+        await loadProfile();
+        setProfileImage(null);
+        // Clear the file input
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+      // 2. Update other profile fields
       await updateProfile(profileData);
       showToast('Profile updated successfully!', 'success');
-      await loadProfile(); // refresh
     } catch (error) {
       showToast(error.response?.data?.message || 'Failed to update profile', 'error');
     } finally {
@@ -216,7 +240,18 @@ export default function ProfilePage() {
         <div className="profile-layout justifty-start">
           <aside className="profile-sidebar">
             <div className="profile-avatar">
-              <div className="avatar-circle">{profileData.name?.charAt(0)?.toUpperCase() || 'U'}</div>
+              {imagePreview ? (
+                <img
+                  src={imagePreview}
+                  alt="Profile"
+                  className="avatar-image"
+                  onError={() => setImagePreview(null)}
+                />
+              ) : (
+                <div className="avatar-circle">
+                  {profileData.name?.charAt(0)?.toUpperCase() || 'U'}
+                </div>
+              )}
               <h3>{profileData.name || 'User'}</h3>
               <p>{profileData.email}</p>
             </div>
@@ -243,6 +278,21 @@ export default function ProfilePage() {
                 <h2>Personal Information</h2>
                 <form onSubmit={handleProfileUpdate} className="profile-form">
                   <div className="form-group">
+                    <label>Profile Picture</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      ref={fileInputRef}
+                    />
+                    {imagePreview && (
+                      <div className="image-preview-thumb" style={{ marginTop: '0.5rem' }}>
+                        <img src={imagePreview} alt="Preview" width="80" style={{ borderRadius: '0.5rem' }} />
+                      </div>
+                    )}
+                    <small>Recommended: 300×300 pixels</small>
+                  </div>
+                  <div className="form-group">
                     <label>Full Name</label>
                     <input type="text" value={profileData.name} onChange={(e) => setProfileData({ ...profileData, name: e.target.value })} required />
                   </div>
@@ -264,6 +314,7 @@ export default function ProfilePage() {
               </div>
             )}
 
+            {/* Security, Addresses, Stats tabs remain exactly the same as your original code */}
             {activeTab === 'security' && (
               <div className="profile-card">
                 <h2>Change Password</h2>

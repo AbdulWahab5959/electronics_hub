@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Address;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+
 
 class ProfileController extends Controller
 {
@@ -43,7 +46,7 @@ class ProfileController extends Controller
         
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
-            'phone' => 'sometimes|string|max:20',
+            'phone' => 'sometimes|numeric|digits_between:7,15',
             'bio' => 'sometimes|string|max:500',
         ]);
         
@@ -186,7 +189,6 @@ class ProfileController extends Controller
     
     /**
      * Delete address
-     * DELETE /api/addresses/{id}
      */
     public function deleteAddress($id)
     {
@@ -234,26 +236,32 @@ class ProfileController extends Controller
     
     /**
      * Upload profile picture
-     * POST /api/profile/picture
+     * POST /api/user/avatar
      */
-    public function uploadPicture(Request $request)
+     public function uploadAvatar(Request $request)
     {
         $request->validate([
-            'picture' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048', // 2MB max
         ]);
-        
-        $user = $request->user();
-        
-        // Store the image
-        $path = $request->file('picture')->store('profile-pictures', 'public');
-        
+
+        $user = Auth::user();
+
+        // Delete old avatar if exists
+        if ($user->avatar) {
+            Storage::disk('public')->delete($user->avatar);
+        }
+
+        // Store new avatar in 'storage/app/public/avatars'
+        $path = $request->file('avatar')->store('avatars', 'public');
+
         // Update user record
-        $user->update(['avatar' => $path]);
-        
+        $user->avatar = $path;
+        $user->save();
+
+        // Return full URL
         return response()->json([
-            'success' => true,
-            'message' => 'Profile picture updated',
-            'data' => ['avatar' => asset('storage/' . $path)]
+            'message' => 'Avatar uploaded successfully',
+            'avatar' => asset('storage/' . $path),
         ]);
     }
     
