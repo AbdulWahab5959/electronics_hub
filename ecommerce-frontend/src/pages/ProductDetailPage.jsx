@@ -38,6 +38,29 @@ const fetchProduct = async () => {
   try {
     const response = await getProduct(id);
     const { product: productData, related_products } = response.data.data;
+
+    // ✅ Parse specifications safely
+    if (typeof productData.specifications === 'string') {
+      try {
+        productData.specifications = JSON.parse(productData.specifications);
+      } catch {
+        productData.specifications = {};  // fallback
+      }
+    } else if (!productData.specifications || typeof productData.specifications !== 'object') {
+      productData.specifications = {};
+    }
+
+    // ✅ Parse features safely
+    if (typeof productData.features === 'string') {
+      try {
+        productData.features = JSON.parse(productData.features);
+      } catch {
+        productData.features = [];   // fallback
+      }
+    } else if (!Array.isArray(productData.features)) {
+      productData.features = [];
+    }
+
     setProduct(productData);
     setRelatedProducts(related_products || []);
   } catch (error) {
@@ -98,9 +121,8 @@ const fetchProduct = async () => {
     );
   }
 
-  // Build images array from API response (assuming product.images is an array of objects with 'url' or 'path')
   const images = product.images?.length
-    ? product.images.map(img => img.url || img.path || img.image) // adjust to your data structure
+    ? product.images.map(img => img.url || img.path || img.image)
     : ['https://placehold.co/600x600?text=No+Image'];
 
   // Normalize discount percentage
@@ -127,30 +149,19 @@ const fetchProduct = async () => {
           {/* Product Gallery */}
           <div className="product-gallery">
             <div className="main-image">
-              <img 
-                src={images[selectedImage] || images[0]} 
-                alt={product.name} 
-                onError={(e) => { e.target.src = 'https://placehold.co/600x600?text=Image+Not+Found'; }}
+              <img
+                src={product.image || 'https://placehold.co/600x600?text=No+Image'}
+                alt={product.name}
+                onError={(e) => { e.target.src = 'https://placehold.co/600x600?text=No+Image'; }}
               />
-              {discount > 0 && (
-                <div className="discount-badge">-{discount}%</div>
+              {product.discount > 0 && (
+                <div className="discount-badge">-{product.discount}%</div>
               )}
             </div>
-            {images.length > 1 && (
+            {/* Only show thumbnails if you have more than one image – optional */}
+            {false && (
               <div className="thumbnail-list">
-                {images.map((img, index) => (
-                  <button
-                    key={index}
-                    className={`thumbnail ${selectedImage === index ? 'active' : ''}`}
-                    onClick={() => setSelectedImage(index)}
-                  >
-                    <img 
-                      src={img} 
-                      alt={`${product.name} view ${index + 1}`} 
-                      onError={(e) => { e.target.src = 'https://placehold.co/80x80?text=Error'; }}
-                    />
-                  </button>
-                ))}
+                {/* ... */}
               </div>
             )}
           </div>
@@ -180,7 +191,7 @@ const fetchProduct = async () => {
             </div>
 
             <div className="product-description-short">
-              <p>{product.description?.substring(0, 200) || 'No description available.'}...</p>
+              <p>{product.description || 'No description available.'}</p>
             </div>
 
             {/* Stock Status */}
@@ -233,16 +244,6 @@ const fetchProduct = async () => {
                   Buy Now
                 </button>
               </div>
-
-              <button 
-                className={`wishlist-btn-detail ${isWishlisted ? 'active' : ''}`}
-                onClick={handleAddToWishlist}
-              >
-                <svg viewBox="0 0 24 24" fill={isWishlisted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
-                {isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
-              </button>
             </div>
 
             {/* Shipping Info (static, keep as is) */}
@@ -275,29 +276,29 @@ const fetchProduct = async () => {
         {/* Product Tabs */}
         <div className="product-tabs">
           <div className="tabs-header">
-            <button 
+            <button
               className={`tab-btn ${activeTab === 'description' ? 'active' : ''}`}
               onClick={() => setActiveTab('description')}
             >
               Description
             </button>
-            <button 
+            <button
               className={`tab-btn ${activeTab === 'specifications' ? 'active' : ''}`}
               onClick={() => setActiveTab('specifications')}
             >
               Specifications
             </button>
-            <button 
+            <button
               className={`tab-btn ${activeTab === 'features' ? 'active' : ''}`}
               onClick={() => setActiveTab('features')}
             >
               Features
             </button>
-            <button 
+            <button
               className={`tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
               onClick={() => setActiveTab('reviews')}
             >
-              Reviews ({(product.reviews_count || 0).toLocaleString()})
+              Reviews ({(product.reviews || 0).toLocaleString()})
             </button>
           </div>
 
@@ -334,7 +335,7 @@ const fetchProduct = async () => {
                     {product.features.map((feature, index) => (
                       <li key={index}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M20 6L9 17l-5-5"/>
+                          <path d="M20 6L9 17l-5-5" />
                         </svg>
                         {feature}
                       </li>
@@ -352,7 +353,7 @@ const fetchProduct = async () => {
                   <div className="average-rating">
                     <span className="rating-number">{product.rating || 0}</span>
                     <RatingStars rating={product.rating || 0} size="lg" />
-                    <span className="total-reviews">Based on {(product.reviews_count || 0).toLocaleString()} reviews</span>
+                    <span className="total-reviews">Based on {(product.reviews || 0).toLocaleString()} reviews</span>
                   </div>
                 </div>
                 <div className="review-form-prompt">
@@ -371,7 +372,16 @@ const fetchProduct = async () => {
               {relatedProducts.map(product => (
                 <ProductCard
                   key={product.id}
-                  product={product}
+                  id={product.id}
+                  name={product.name}
+                  price={product.price}
+                  originalPrice={product.original_price}   // snake_case → camelCase
+                  image={product.image}
+                  rating={product.rating}
+                  reviews={product.reviews}
+                  discount={product.discount}
+                  isNew={product.is_new}
+                  isFeatured={product.is_featured}
                   onAddToCart={() => addToCart(product, 1)}
                 />
               ))}
