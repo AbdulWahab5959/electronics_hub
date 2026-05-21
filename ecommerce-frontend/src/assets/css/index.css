@@ -1,3 +1,4 @@
+@import './variables.css';
 @import './globals.css';
 
 /* ============================================ */
@@ -550,11 +551,7 @@
   transition: all var(--transition-fast);
 }
 
-.quick-view-btn:hover {
-  background: var(--color-primary-600);
-  color: white;
-  transform: scale(1.05);
-}
+
 
 /* Product Info */
 .product-info {
@@ -645,7 +642,7 @@
 
 /* Add to Cart Button */
 .add-to-cart-btn {
-  width: 100%;
+  margin-inline: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -661,7 +658,7 @@
 }
 
 .add-to-cart-btn:hover {
-  background: var(--color-primary-600);
+  background: var(--color-primary-600) !important;
   color: white;
 }
 
@@ -3189,7 +3186,6 @@
   font-size: 0.875rem;
   color: var(--color-gray-700);
   position: relative;
-  padding-left: 28px;
 }
 
 .filter-checkbox input {
@@ -3230,14 +3226,15 @@
   display: block;
 }
 
-.filter-checkbox .checkmark:after {
-  left: 5px;
-  top: 1px;
-  width: 4px;
-  height: 8px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.filter-checkbox .checkmark:after
+ {
+    left: 5px;
+    top: 2px;
+    width: 5px;
+    height: 11px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
 }
 
 .filter-label {
@@ -3567,7 +3564,7 @@
 }
 
 .checkmark {
-  position: static;
+  position: relative;
   width: 22px;
   height: 22px;
   border: 2px solid var(--color-gray-300);
@@ -3582,13 +3579,6 @@
   background: linear-gradient(135deg, #2563eb, #7c3aed);
   border-color: transparent;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.3);
-}
-
-.filter-checkbox input:checked + .checkmark::after {
-  content: "✓";
-  color: white;
-  font-size: 14px;
-  font-weight: 900;
 }
 
 .filter-checkbox:has(input:checked) {
@@ -3741,8 +3731,6 @@
 
 .pagination-number.active {
   background: var(--color-primary-600);
-  border-color: var(--color-primary-600);
-  color: white;
   cursor: default;
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
@@ -9657,7 +9645,7 @@
 
 /* ===== MAIN HEADER (logo + actions) ===== */
 .tech-main-header {
-  padding: 1rem 0;
+  padding: 0.3rem 0;
   background: white;
 }
 

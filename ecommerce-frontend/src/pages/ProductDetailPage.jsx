@@ -1,4 +1,3 @@
-// src/pages/ProductDetailPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Breadcrumb } from '../components/common/Breadcrumb';
@@ -7,114 +6,48 @@ import { RatingStars } from '../components/common/RatingStars';
 import { ProductCard } from '../components/common/ProductCard';
 import { useCart } from '../hooks/useCart';
 import { useToast } from '../components/common/ToastNotification';
+import { getProduct, getProducts } from '../services/product'; // import real API functions
 
 export default function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const showToast = useToast();
-  
-  // State
+
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
   const [activeTab, setActiveTab] = useState('description');
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [isWishlisted, setIsWishlisted] = useState(false);
 
-  // Mock product data (replace with API call)
-  const mockProduct = {
-    id: parseInt(id),
-    name: "Sony WH-1000XM5 Wireless Noise Cancelling Headphones",
-    brand: "Sony",
-    price: 349.99,
-    originalPrice: 399.99,
-    discount: 12,
-    rating: 4.8,
-    reviews: 5678,
-    description: "Experience unparalleled noise cancellation and premium sound quality with the Sony WH-1000XM5 headphones. Industry-leading noise cancellation with Dual Noise Sensor technology. Exceptional sound quality with Sony's HD Noise Cancelling Processor QN1. Ultra-comfortable design with soft fit leather. Up to 30 hours of battery life with quick charging (3 minutes charge gives 3 hours playback).",
-    specifications: {
-      brand: "Sony",
-      model: "WH-1000XM5",
-      color: "Black",
-      connectivity: "Bluetooth 5.2",
-      batteryLife: "30 hours",
-      chargingTime: "3.5 hours",
-      weight: "250g",
-      warranty: "1 year",
-    },
-    features: [
-      "Industry-leading noise cancellation",
-      "Premium sound quality",
-      "30-hour battery life",
-      "Quick charging support",
-      "Multipoint connection",
-      "Speak-to-chat technology",
-      "Adaptive sound control",
-      "Wearing detection",
-    ],
-    inStock: true,
-    stockCount: 45,
-    sku: "SONY-WH1000XM5-BLK",
-    images: [
-      "https://placehold.co/600x600/3b82f6/white?text=Headphone+Front",
-      "https://placehold.co/600x600/8b5cf6/white?text=Headphone+Side",
-      "https://placehold.co/600x600/10b981/white?text=Headphone+Back",
-      "https://placehold.co/600x600/f59e0b/white?text=Headphone+Case",
-    ],
-    category: "headphones",
-    tags: ["wireless", "noise-cancelling", "premium", "sony"],
-  };
-
-  // Related products
-  const mockRelatedProducts = [
-    {
-      id: 2,
-      name: "Bose QuietComfort Earbuds",
-      price: 249.99,
-      originalPrice: 299.99,
-      image: "https://placehold.co/400x400/06b6d4/white?text=Bose",
-      rating: 4.7,
-      reviews: 1567,
-      discount: 17,
-    },
-    {
-      id: 3,
-      name: "Apple AirPods Pro 2",
-      price: 199.99,
-      originalPrice: 249.99,
-      image: "https://placehold.co/400x400/6366f1/white?text=AirPods",
-      rating: 4.9,
-      reviews: 8921,
-      discount: 20,
-    },
-    {
-      id: 4,
-      name: "Sennheiser Momentum 4",
-      price: 299.99,
-      originalPrice: 349.99,
-      image: "https://placehold.co/400x400/ec4899/white?text=Sennheiser",
-      rating: 4.6,
-      reviews: 2345,
-      discount: 14,
-    },
-  ];
-
   useEffect(() => {
-    fetchProduct();
+    if (id) {
+      fetchProduct();
+    }
     window.scrollTo(0, 0);
+    // reset quantity when product changes
+    setQuantity(1);
+    setSelectedImage(0);
   }, [id]);
 
-  const fetchProduct = () => {
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setProduct(mockProduct);
-      setRelatedProducts(mockRelatedProducts);
-      setLoading(false);
-    }, 500);
-  };
+const fetchProduct = async () => {
+  setLoading(true);
+  try {
+    const response = await getProduct(id);
+    const { product: productData, related_products } = response.data.data;
+    setProduct(productData);
+    setRelatedProducts(related_products || []);
+  } catch (error) {
+    console.error('Failed to load product:', error);
+    showToast('Failed to load product details', 'error');
+    setProduct(null);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleAddToCart = () => {
     if (product && product.inStock) {
@@ -138,6 +71,7 @@ export default function ProductDetailPage() {
     );
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="product-detail-loading">
@@ -151,17 +85,29 @@ export default function ProductDetailPage() {
     );
   }
 
-  if (!product) {
+  // Error or product not found
+  if (error || !product) {
     return (
       <div className="product-not-found">
         <div className="container">
-          <h2>Product Not Found</h2>
-          <p>The product you're looking for doesn't exist.</p>
+          <h2>{error || 'Product Not Found'}</h2>
+          <p>The product you're looking for doesn't exist or has been removed.</p>
           <Link to="/shop" className="btn-primary">Continue Shopping</Link>
         </div>
       </div>
     );
   }
+
+  // Build images array from API response (assuming product.images is an array of objects with 'url' or 'path')
+  const images = product.images?.length
+    ? product.images.map(img => img.url || img.path || img.image) // adjust to your data structure
+    : ['https://placehold.co/600x600?text=No+Image'];
+
+  // Normalize discount percentage
+  const discount = product.discount_percentage || product.discount || 
+    (product.original_price && product.price 
+      ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
+      : 0);
 
   return (
     <div className="product-detail-page">
@@ -171,7 +117,7 @@ export default function ProductDetailPage() {
           items={[
             { name: 'Home', path: '/' },
             { name: 'Shop', path: '/shop' },
-            { name: product.category, path: `/category/${product.category}` },
+            { name: product.category?.name || product.category_name || 'Category', path: `/shop?category=${product.category?.slug || product.category}` },
             { name: product.name }
           ]}
         />
@@ -181,58 +127,68 @@ export default function ProductDetailPage() {
           {/* Product Gallery */}
           <div className="product-gallery">
             <div className="main-image">
-              <img src={product.images[selectedImage]} alt={product.name} />
-              {product.discount > 0 && (
-                <div className="discount-badge">-{product.discount}%</div>
+              <img 
+                src={images[selectedImage] || images[0]} 
+                alt={product.name} 
+                onError={(e) => { e.target.src = 'https://placehold.co/600x600?text=Image+Not+Found'; }}
+              />
+              {discount > 0 && (
+                <div className="discount-badge">-{discount}%</div>
               )}
             </div>
-            <div className="thumbnail-list">
-              {product.images.map((img, index) => (
-                <button
-                  key={index}
-                  className={`thumbnail ${selectedImage === index ? 'active' : ''}`}
-                  onClick={() => setSelectedImage(index)}
-                >
-                  <img src={img} alt={`${product.name} view ${index + 1}`} />
-                </button>
-              ))}
-            </div>
+            {images.length > 1 && (
+              <div className="thumbnail-list">
+                {images.map((img, index) => (
+                  <button
+                    key={index}
+                    className={`thumbnail ${selectedImage === index ? 'active' : ''}`}
+                    onClick={() => setSelectedImage(index)}
+                  >
+                    <img 
+                      src={img} 
+                      alt={`${product.name} view ${index + 1}`} 
+                      onError={(e) => { e.target.src = 'https://placehold.co/80x80?text=Error'; }}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Product Info */}
           <div className="product-info-detail">
-            <div className="product-brand">{product.brand}</div>
+            <div className="product-brand">{product.brand?.name || product.brand_name || ''}</div>
             <h1 className="product-title-detail">{product.name}</h1>
             
             <div className="product-rating-section">
-              <RatingStars rating={product.rating} totalReviews={product.reviews} />
+              <RatingStars rating={product.rating || 0} totalReviews={product.reviews_count || 0} />
               <span className="review-link">
-                <Link to="#reviews">See all {product.reviews.toLocaleString()} reviews</Link>
+                <a href="#reviews">See all {(product.reviews_count || 0).toLocaleString()} reviews</a>
               </span>
             </div>
 
             <div className="product-price-section">
-              {product.originalPrice > product.price ? (
+              {product.original_price > product.price ? (
                 <>
-                  <span className="price-current">${product.price.toFixed(2)}</span>
-                  <span className="price-original">${product.originalPrice.toFixed(2)}</span>
-                  <span className="price-saved">Save ${(product.originalPrice - product.price).toFixed(2)}</span>
+                  <span className="price-current">${parseFloat(product.price).toFixed(2)}</span>
+                  <span className="price-original">${parseFloat(product.original_price).toFixed(2)}</span>
+                  <span className="price-saved">Save ${(parseFloat(product.original_price) - parseFloat(product.price)).toFixed(2)}</span>
                 </>
               ) : (
-                <span className="price-current">${product.price.toFixed(2)}</span>
+                <span className="price-current">${parseFloat(product.price).toFixed(2)}</span>
               )}
             </div>
 
             <div className="product-description-short">
-              <p>{product.description.substring(0, 200)}...</p>
+              <p>{product.description?.substring(0, 200) || 'No description available.'}...</p>
             </div>
 
             {/* Stock Status */}
             <div className="stock-status">
-              {product.inStock ? (
+              {product.inStock || product.stock > 0 ? (
                 <div className="in-stock">
                   <span className="stock-dot"></span>
-                  In Stock | {product.stockCount} units available
+                  In Stock | {product.stock} units available
                 </div>
               ) : (
                 <div className="out-of-stock">Out of Stock</div>
@@ -240,7 +196,7 @@ export default function ProductDetailPage() {
             </div>
 
             {/* SKU */}
-            <div className="product-sku">SKU: {product.sku}</div>
+            <div className="product-sku">SKU: {product.sku || product.id}</div>
 
             {/* Quantity & Add to Cart */}
             <div className="product-actions">
@@ -249,7 +205,7 @@ export default function ProductDetailPage() {
                 <QuantitySelector
                   initialQuantity={1}
                   min={1}
-                  max={product.stockCount}
+                  max={product.stock || 10}
                   onChange={setQuantity}
                   size="lg"
                 />
@@ -259,7 +215,7 @@ export default function ProductDetailPage() {
                 <button 
                   className="add-to-cart-btn-detail"
                   onClick={handleAddToCart}
-                  disabled={!product.inStock}
+                  disabled={!(product.inStock || product.stock > 0)}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="9" cy="21" r="1"/>
@@ -272,7 +228,7 @@ export default function ProductDetailPage() {
                 <button 
                   className="buy-now-btn"
                   onClick={handleBuyNow}
-                  disabled={!product.inStock}
+                  disabled={!(product.inStock || product.stock > 0)}
                 >
                   Buy Now
                 </button>
@@ -289,7 +245,7 @@ export default function ProductDetailPage() {
               </button>
             </div>
 
-            {/* Shipping Info */}
+            {/* Shipping Info (static, keep as is) */}
             <div className="shipping-info-detail">
               <div className="shipping-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -341,44 +297,52 @@ export default function ProductDetailPage() {
               className={`tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
               onClick={() => setActiveTab('reviews')}
             >
-              Reviews ({product.reviews.toLocaleString()})
+              Reviews ({(product.reviews_count || 0).toLocaleString()})
             </button>
           </div>
 
           <div className="tabs-content">
             {activeTab === 'description' && (
               <div className="tab-description">
-                <p>{product.description}</p>
+                <p>{product.description || 'No description available.'}</p>
               </div>
             )}
 
             {activeTab === 'specifications' && (
               <div className="tab-specifications">
-                <table className="specs-table">
-                  <tbody>
-                    {Object.entries(product.specifications).map(([key, value]) => (
-                      <tr key={key}>
-                        <td className="spec-label">{key.charAt(0).toUpperCase() + key.slice(1)}</td>
-                        <td className="spec-value">{value}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {product.specifications && Object.keys(product.specifications).length > 0 ? (
+                  <table className="specs-table">
+                    <tbody>
+                      {Object.entries(product.specifications).map(([key, value]) => (
+                        <tr key={key}>
+                          <td className="spec-label">{key.charAt(0).toUpperCase() + key.slice(1)}</td>
+                          <td className="spec-value">{value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p>No specifications available.</p>
+                )}
               </div>
             )}
 
             {activeTab === 'features' && (
               <div className="tab-features">
-                <ul className="features-list">
-                  {product.features.map((feature, index) => (
-                    <li key={index}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M20 6L9 17l-5-5"/>
-                      </svg>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
+                {product.features && product.features.length > 0 ? (
+                  <ul className="features-list">
+                    {product.features.map((feature, index) => (
+                      <li key={index}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M20 6L9 17l-5-5"/>
+                        </svg>
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No features listed.</p>
+                )}
               </div>
             )}
 
@@ -386,9 +350,9 @@ export default function ProductDetailPage() {
               <div className="tab-reviews">
                 <div className="reviews-summary">
                   <div className="average-rating">
-                    <span className="rating-number">{product.rating}</span>
-                    <RatingStars rating={product.rating} size="lg" />
-                    <span className="total-reviews">Based on {product.reviews.toLocaleString()} reviews</span>
+                    <span className="rating-number">{product.rating || 0}</span>
+                    <RatingStars rating={product.rating || 0} size="lg" />
+                    <span className="total-reviews">Based on {(product.reviews_count || 0).toLocaleString()} reviews</span>
                   </div>
                 </div>
                 <div className="review-form-prompt">
@@ -407,7 +371,7 @@ export default function ProductDetailPage() {
               {relatedProducts.map(product => (
                 <ProductCard
                   key={product.id}
-                  {...product}
+                  product={product}
                   onAddToCart={() => addToCart(product, 1)}
                 />
               ))}

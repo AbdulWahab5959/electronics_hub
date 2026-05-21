@@ -18,12 +18,12 @@ export const ProductCard = ({
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
-  // ✅ Convert price and originalPrice to numbers (they may be strings from API)
-  const numericPrice = typeof price === 'string' ? parseFloat(price) : price;
-  const numericOriginalPrice = originalPrice ? (typeof originalPrice === 'string' ? parseFloat(originalPrice) : originalPrice) : null;
+  // ✅ Convert price and originalPrice to numbers safely
+  const numericPrice = parseFloat(price) || 0;
+  const numericOriginalPrice = originalPrice ? (parseFloat(originalPrice) || 0) : 0;
 
   // Calculate discount if not provided
-  const discountPercentage = discount || (numericOriginalPrice ? Math.round(((numericOriginalPrice - numericPrice) / numericOriginalPrice) * 100) : 0);
+  const discountPercentage = discount || (numericOriginalPrice > 0 ? Math.round(((numericOriginalPrice - numericPrice) / numericOriginalPrice) * 100) : 0);
   
   // Generate star rating
   const renderStars = () => {
@@ -90,7 +90,7 @@ export const ProductCard = ({
           />
           {isHovered && (
             <div className="product-overlay">
-              <button className="quick-view-btn">Quick View</button>
+              <div className="quick-view-btn">Quick View</div>
             </div>
           )}
         </div>
@@ -110,7 +110,7 @@ export const ProductCard = ({
 
         {/* Price */}
         <div className="product-price-section">
-          {numericOriginalPrice && numericOriginalPrice > numericPrice ? (
+          {numericOriginalPrice > numericPrice ? (
             <>
               <span className="current-price">${numericPrice.toFixed(2)}</span>
               <span className="original-price">${numericOriginalPrice.toFixed(2)}</span>
