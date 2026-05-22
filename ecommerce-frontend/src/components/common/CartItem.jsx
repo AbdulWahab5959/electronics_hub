@@ -87,16 +87,6 @@ export const CartItem = ({
 
           {/* Action Buttons */}
           <div className="cart-item-action-buttons">
-            <button 
-              className="cart-item-action move-to-wishlist"
-              onClick={handleMoveToWishlist}
-              disabled={isLoading}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-              </svg>
-              Move to Wishlist
-            </button>
             
             <button 
               className="cart-item-action remove-item"
@@ -117,11 +107,11 @@ export const CartItem = ({
       <div className="cart-item-price-section">
         <div className="cart-item-unit-price">
           <span className="price-label">Unit Price</span>
-          <span className="price-value">${price.toFixed(2)}</span>
+          <span className="price-value">${Number(price).toFixed(2)}</span>
         </div>
         <div className="cart-item-total">
           <span className="total-label">Total</span>
-          <span className="total-value">${itemTotal.toFixed(2)}</span>
+          <span className="total-value">${Number(itemTotal).toFixed(2)}</span>
         </div>
       </div>
     </div>

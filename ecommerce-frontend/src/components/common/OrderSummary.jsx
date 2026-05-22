@@ -54,9 +54,9 @@ export const OrderSummary = ({
               </span>
             </div>
           ))}
-          {items.length > 3 && (
+          {items.length > 5 && (
             <div className="order-more-items">
-              +{items.length - 3} more items
+              +{items.length - 5} more items
             </div>
           )}
         </div>
@@ -153,9 +153,6 @@ export const OrderSummary = ({
         ) : (
           <>
             Proceed to Checkout
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
           </>
         )}
       </button>

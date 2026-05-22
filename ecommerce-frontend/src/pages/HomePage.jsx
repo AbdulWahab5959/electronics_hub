@@ -134,7 +134,7 @@ export default function HomePage() {
                 Summer Mega Sale
               </div>
               <h1 className="hero-title">
-                Premium <span className="hero-highlight">Electronics</span>at Best Prices
+                Premium <span className="hero-highlight">Electronics</span> at Best Prices
               </h1>
               <p className="hero-description">
                 Discover the latest tech gadgets, laptops, headphones, and smartwatches. 

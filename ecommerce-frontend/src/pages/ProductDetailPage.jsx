@@ -5,93 +5,93 @@ import { QuantitySelector } from '../components/common/QuantitySelector';
 import { RatingStars } from '../components/common/RatingStars';
 import { ProductCard } from '../components/common/ProductCard';
 import { useCart } from '../hooks/useCart';
+import { useAuth } from '../hooks/useAuth';   // ✅ added
 import { useToast } from '../components/common/ToastNotification';
-import { getProduct, getProducts } from '../services/product'; // import real API functions
+import { getProduct } from '../services/product';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { isAuthenticated } = useAuth();   // ✅ authentication status
   const showToast = useToast();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [quantity, setQuantity] = useState(1);
-  const [selectedImage, setSelectedImage] = useState(0);
   const [activeTab, setActiveTab] = useState('description');
   const [relatedProducts, setRelatedProducts] = useState([]);
-  const [isWishlisted, setIsWishlisted] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchProduct();
     }
     window.scrollTo(0, 0);
-    // reset quantity when product changes
     setQuantity(1);
-    setSelectedImage(0);
   }, [id]);
 
-const fetchProduct = async () => {
-  setLoading(true);
-  try {
-    const response = await getProduct(id);
-    const { product: productData, related_products } = response.data.data;
+  const fetchProduct = async () => {
+    setLoading(true);
+    try {
+      const response = await getProduct(id);
+      const { product: productData, related_products } = response.data.data;
 
-    // ✅ Parse specifications safely
-    if (typeof productData.specifications === 'string') {
-      try {
-        productData.specifications = JSON.parse(productData.specifications);
-      } catch {
-        productData.specifications = {};  // fallback
+      // Parse specifications if it's a JSON string
+      if (typeof productData.specifications === 'string') {
+        try {
+          productData.specifications = JSON.parse(productData.specifications);
+        } catch {
+          productData.specifications = {};
+        }
+      } else if (!productData.specifications || typeof productData.specifications !== 'object') {
+        productData.specifications = {};
       }
-    } else if (!productData.specifications || typeof productData.specifications !== 'object') {
-      productData.specifications = {};
-    }
 
-    // ✅ Parse features safely
-    if (typeof productData.features === 'string') {
-      try {
-        productData.features = JSON.parse(productData.features);
-      } catch {
-        productData.features = [];   // fallback
+      // Parse features if it's a JSON string
+      if (typeof productData.features === 'string') {
+        try {
+          productData.features = JSON.parse(productData.features);
+        } catch {
+          productData.features = [];
+        }
+      } else if (!Array.isArray(productData.features)) {
+        productData.features = [];
       }
-    } else if (!Array.isArray(productData.features)) {
-      productData.features = [];
-    }
 
-    setProduct(productData);
-    setRelatedProducts(related_products || []);
-  } catch (error) {
-    console.error('Failed to load product:', error);
-    showToast('Failed to load product details', 'error');
-    setProduct(null);
-  } finally {
-    setLoading(false);
-  }
-};
+      setProduct(productData);
+      setRelatedProducts(related_products || []);
+    } catch (error) {
+      console.error('Failed to load product:', error);
+      showToast('Failed to load product details', 'error');
+      setProduct(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddToCart = () => {
-    if (product && product.inStock) {
+    if (!isAuthenticated) {
+      showToast('Please log in to add items to your cart.', 'info');
+      navigate('/login');
+      return;
+    }
+    if (product && product.stock > 0) {
       addToCart(product, quantity);
       showToast(`${quantity} × ${product.name} added to cart!`, 'success');
     }
   };
 
   const handleBuyNow = () => {
-    if (product && product.inStock) {
+    if (!isAuthenticated) {
+      showToast('Please log in to proceed.', 'info');
+      navigate('/login');
+      return;
+    }
+    if (product && product.stock > 0) {
       addToCart(product, quantity);
       navigate('/cart');
     }
-  };
-
-  const handleAddToWishlist = () => {
-    setIsWishlisted(!isWishlisted);
-    showToast(
-      isWishlisted ? 'Removed from wishlist' : 'Added to wishlist',
-      'success'
-    );
   };
 
   // Loading state
@@ -121,25 +121,16 @@ const fetchProduct = async () => {
     );
   }
 
-  const images = product.images?.length
-    ? product.images.map(img => img.url || img.path || img.image)
-    : ['https://placehold.co/600x600?text=No+Image'];
-
-  // Normalize discount percentage
-  const discount = product.discount_percentage || product.discount || 
-    (product.original_price && product.price 
-      ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
-      : 0);
+  const discount = product.discount || (product.original_price && product.price ? Math.round(((product.original_price - product.price) / product.original_price) * 100) : 0);
 
   return (
     <div className="product-detail-page">
       <div className="container">
-        {/* Breadcrumb */}
         <Breadcrumb 
           items={[
             { name: 'Home', path: '/' },
             { name: 'Shop', path: '/shop' },
-            { name: product.category?.name || product.category_name || 'Category', path: `/shop?category=${product.category?.slug || product.category}` },
+            { name: product.category || 'Category', path: `/shop?category=${product.category}` },
             { name: product.name }
           ]}
         />
@@ -158,23 +149,17 @@ const fetchProduct = async () => {
                 <div className="discount-badge">-{product.discount}%</div>
               )}
             </div>
-            {/* Only show thumbnails if you have more than one image – optional */}
-            {false && (
-              <div className="thumbnail-list">
-                {/* ... */}
-              </div>
-            )}
           </div>
 
           {/* Product Info */}
           <div className="product-info-detail">
-            <div className="product-brand">{product.brand?.name || product.brand_name || ''}</div>
+            <div className="product-brand">{product.brand || ''}</div>
             <h1 className="product-title-detail">{product.name}</h1>
             
             <div className="product-rating-section">
-              <RatingStars rating={product.rating || 0} totalReviews={product.reviews_count || 0} />
+              <RatingStars rating={product.rating || 0} totalReviews={product.reviews || 0} />
               <span className="review-link">
-                <a href="#reviews">See all {(product.reviews_count || 0).toLocaleString()} reviews</a>
+                <a href="#reviews">See all {(product.reviews || 0).toLocaleString()} reviews</a>
               </span>
             </div>
 
@@ -196,7 +181,7 @@ const fetchProduct = async () => {
 
             {/* Stock Status */}
             <div className="stock-status">
-              {product.inStock || product.stock > 0 ? (
+              {product.stock > 0 ? (
                 <div className="in-stock">
                   <span className="stock-dot"></span>
                   In Stock | {product.stock} units available
@@ -206,7 +191,6 @@ const fetchProduct = async () => {
               )}
             </div>
 
-            {/* SKU */}
             <div className="product-sku">SKU: {product.sku || product.id}</div>
 
             {/* Quantity & Add to Cart */}
@@ -226,7 +210,7 @@ const fetchProduct = async () => {
                 <button 
                   className="add-to-cart-btn-detail"
                   onClick={handleAddToCart}
-                  disabled={!(product.inStock || product.stock > 0)}
+                  disabled={product.stock <= 0}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="9" cy="21" r="1"/>
@@ -239,14 +223,14 @@ const fetchProduct = async () => {
                 <button 
                   className="buy-now-btn"
                   onClick={handleBuyNow}
-                  disabled={!(product.inStock || product.stock > 0)}
+                  disabled={product.stock <= 0}
                 >
                   Buy Now
                 </button>
               </div>
             </div>
 
-            {/* Shipping Info (static, keep as is) */}
+            {/* Shipping Info */}
             <div className="shipping-info-detail">
               <div className="shipping-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -276,30 +260,10 @@ const fetchProduct = async () => {
         {/* Product Tabs */}
         <div className="product-tabs">
           <div className="tabs-header">
-            <button
-              className={`tab-btn ${activeTab === 'description' ? 'active' : ''}`}
-              onClick={() => setActiveTab('description')}
-            >
-              Description
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'specifications' ? 'active' : ''}`}
-              onClick={() => setActiveTab('specifications')}
-            >
-              Specifications
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'features' ? 'active' : ''}`}
-              onClick={() => setActiveTab('features')}
-            >
-              Features
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
-              onClick={() => setActiveTab('reviews')}
-            >
-              Reviews ({(product.reviews || 0).toLocaleString()})
-            </button>
+            <button className={`tab-btn ${activeTab === 'description' ? 'active' : ''}`} onClick={() => setActiveTab('description')}>Description</button>
+            <button className={`tab-btn ${activeTab === 'specifications' ? 'active' : ''}`} onClick={() => setActiveTab('specifications')}>Specifications</button>
+            <button className={`tab-btn ${activeTab === 'features' ? 'active' : ''}`} onClick={() => setActiveTab('features')}>Features</button>
+            <button className={`tab-btn ${activeTab === 'reviews' ? 'active' : ''}`} onClick={() => setActiveTab('reviews')}>Reviews ({(product.reviews || 0).toLocaleString()})</button>
           </div>
 
           <div className="tabs-content">
@@ -335,7 +299,7 @@ const fetchProduct = async () => {
                     {product.features.map((feature, index) => (
                       <li key={index}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M20 6L9 17l-5-5" />
+                          <path d="M20 6L9 17l-5-5"/>
                         </svg>
                         {feature}
                       </li>
@@ -375,14 +339,22 @@ const fetchProduct = async () => {
                   id={product.id}
                   name={product.name}
                   price={product.price}
-                  originalPrice={product.original_price}   // snake_case → camelCase
+                  originalPrice={product.original_price}
                   image={product.image}
                   rating={product.rating}
                   reviews={product.reviews}
                   discount={product.discount}
                   isNew={product.is_new}
                   isFeatured={product.is_featured}
-                  onAddToCart={() => addToCart(product, 1)}
+                  onAddToCart={() => {
+                    if (!isAuthenticated) {
+                      showToast('Please log in to add items to your cart.', 'info');
+                      navigate('/login');
+                      return;
+                    }
+                    addToCart(product, 1);
+                    showToast(`1 × ${product.name} added to cart!`, 'success');
+                  }}
                 />
               ))}
             </div>

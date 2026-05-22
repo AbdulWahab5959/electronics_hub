@@ -1,9 +1,8 @@
-// src/components/layout/Layout.jsx (Enhanced version)
 import React, { useState, useEffect } from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 
-export const Layout = ({ children }) => {
+export const Layout = ({ children, products = [] }) => {  // accept products prop
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
@@ -20,13 +19,12 @@ export const Layout = ({ children }) => {
 
   return (
     <div className="tech-layout">
-      <Header />
+      <Header products={products} />  {/* pass products to Header */}
       <main className="tech-main">
         {children}
       </main>
       <Footer />
       
-      {/* Scroll to Top Button */}
       <button 
         className={`scroll-top-btn ${showScrollTop ? 'visible' : ''}`}
         onClick={scrollToTop}
