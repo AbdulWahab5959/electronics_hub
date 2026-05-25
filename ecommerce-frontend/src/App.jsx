@@ -15,6 +15,8 @@ import ProductDetailPage from './pages/ProductDetailPage';
 import Cart from './pages/CartPage';
 import WishlistPage from './pages/WishlistPage';
 import ComparePage from './pages/ComparePage';
+import SearchResultsPage from './pages/SearchResultsPage';
+
 
 // Auth Pages
 import Login from './pages/auth/Login';
@@ -55,6 +57,7 @@ function App() {
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/wishlist" element={<WishlistPage />} />
                 <Route path="/compare" element={<ComparePage />} />
+                <Route path="/search" element={<SearchResultsPage />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />

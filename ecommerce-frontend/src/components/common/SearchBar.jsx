@@ -1,4 +1,3 @@
-// src/components/common/SearchBar.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -25,6 +24,7 @@ export const SearchBar = ({
   products = [],
   placeholder = 'Search products...',
   recentSearches = [],
+  onCloseOverlay, // <-- NEW PROP
 }) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -152,6 +152,10 @@ export const SearchBar = ({
 
     saveRecentSearch(cleanValue);
     setIsOpen(false);
+
+    // Close the parent overlay (if provided)
+    onCloseOverlay?.();
+
     navigate(`/search?q=${encodeURIComponent(cleanValue)}`);
   };
 

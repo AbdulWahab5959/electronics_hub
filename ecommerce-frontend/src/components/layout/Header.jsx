@@ -172,6 +172,7 @@ export const Header = ({ products = [] }) => {
       </div>
 
       {/* SEARCH OVERLAY (contains SearchBar) */}
+      {/* SEARCH OVERLAY (contains SearchBar) */}
       {isSearchOpen && (
         <div className="search-overlay" onClick={() => setIsSearchOpen(false)}>
           <div className="search-overlay-box" onClick={(e) => e.stopPropagation()}>
@@ -186,6 +187,7 @@ export const Header = ({ products = [] }) => {
             <SearchBar
               products={products}
               placeholder="Search products by name, brand, or category..."
+              onCloseOverlay={() => setIsSearchOpen(false)}   // <-- ADD THIS LINE
             />
           </div>
         </div>

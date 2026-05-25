@@ -193,50 +193,7 @@ class ProductController extends Controller
             'data' => $products
         ]);
     }
-    
-    /**
-     * Get new arrivals
-     * GET /api/products/new-arrivals
-     */
-    public function newArrivals()
-    {
-        $products = Product::where('is_new', true)
-            ->orderBy('created_at', 'desc')
-            ->limit(12)
-            ->get()
-            ->map(function($product) {
-                $product->formatted_price = '$' . number_format($product->price, 2);
-                return $product;
-            });
         
-        return response()->json([
-            'success' => true,
-            'data' => $products
-        ]);
-    }
-    
-    /**
-     * Get best selling products
-     * GET /api/products/best-selling
-     */
-    public function bestSelling()
-    {
-        // This would typically join with order_items table
-        // For now, order by reviews count
-        $products = Product::orderBy('reviews', 'desc')
-            ->limit(8)
-            ->get()
-            ->map(function($product) {
-                $product->formatted_price = '$' . number_format($product->price, 2);
-                return $product;
-            });
-        
-        return response()->json([
-            'success' => true,
-            'data' => $products
-        ]);
-    }
-    
     /**
      * Search products
      * GET /api/products/search?q=keyword
