@@ -20,13 +20,13 @@ class OrderController extends Controller
             ->with('items')
             ->orderBy('created_at', 'desc')
             ->get();
-        
+
         return response()->json([
             'success' => true,
             'data' => $orders
         ]);
     }
-    
+
     /**
      * Get single order details
      * GET /api/orders/{id}
@@ -34,7 +34,7 @@ class OrderController extends Controller
     public function show($id)
     {
         $order = Order::with('items')->findOrFail($id);
-        
+
         // Ensure user owns this order
         if ($order->user_id !== auth()->id()) {
             return response()->json([
@@ -42,78 +42,67 @@ class OrderController extends Controller
                 'message' => 'Unauthorized'
             ], 403);
         }
-        
+
         return response()->json([
             'success' => true,
             'data' => $order
         ]);
     }
-    
-    /**
-     * Create new order (checkout)
-     * POST /api/orders
-     */
+
+    // In app/Http/Controllers/Api/OrderController.php
+
     public function store(Request $request)
     {
         $validated = $request->validate([
             'shipping_address' => 'required|array',
-            'payment_method' => 'required|string',
-            'shipping_cost' => 'numeric|min:0',
-            'tax' => 'numeric|min:0',
+            'payment_method'   => 'required|string',
+            'shipping_cost'    => 'numeric|min:0',
+            'tax'              => 'numeric|min:0',
+            'items'            => 'required|array|min:1',
+            'items.*.product_id' => 'nullable|exists:products,id',
+            'items.*.name'     => 'required|string',
+            'items.*.price'    => 'required|numeric|min:0',
+            'items.*.quantity' => 'required|integer|min:1',
         ]);
 
-        // Get user's cart
-        $cart = Cart::where('user_id', $request->user()->id)->get();
-        
-        if ($cart->isEmpty()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Cart is empty'
-            ], 422);
-        }
-
         // Calculate totals
-        $subtotal = $cart->sum(function($item) {
-            return $item->price * $item->quantity;
-        });
-        
+        $subtotal = collect($validated['items'])->sum(fn($item) => $item['price'] * $item['quantity']);
         $shippingCost = $validated['shipping_cost'] ?? 0;
         $tax = $validated['tax'] ?? 0;
         $total = $subtotal + $shippingCost + $tax;
 
         // Create order
         $order = Order::create([
-            'user_id' => $request->user()->id,
-            'order_number' => 'ORD-' . strtoupper(uniqid()),
-            'total' => $total,
+            'user_id'          => $request->user()->id,
+            'order_number'     => 'ORD-' . strtoupper(uniqid()),
+            'total'            => $total,
             'shipping_address' => $validated['shipping_address'],
-            'payment_method' => $validated['payment_method'],
-            'shipping_cost' => $shippingCost,
-            'tax' => $tax,
-            'status' => 'pending',
+            'payment_method'   => $validated['payment_method'],
+            'shipping_cost'    => $shippingCost,
+            'tax'              => $tax,
+            'status'           => 'pending',
         ]);
 
-        // Create order items from cart
-        foreach ($cart as $item) {
+        // Create order items
+        foreach ($validated['items'] as $item) {
             OrderItem::create([
-                'order_id' => $order->id,
-                'product_id' => $item->product_id,
-                'name' => $item->name,
-                'price' => $item->price,
-                'quantity' => $item->quantity,
+                'order_id'   => $order->id,
+                'product_id' => $item['product_id'] ?? null,
+                'name'       => $item['name'],
+                'price'      => $item['price'],
+                'quantity'   => $item['quantity'],
             ]);
         }
 
-        // Clear user's cart
-        Cart::where('user_id', $request->user()->id)->delete();
+        // (Optional) Clear backend cart if you later decide to use it
+        // Cart::where('user_id', $request->user()->id)->delete();
 
-        // Load order items for response
         $order->load('items');
 
         return response()->json([
             'success' => true,
             'message' => 'Order placed successfully',
-            'data' => $order
+            'data'    => $order
         ], 201);
     }
 

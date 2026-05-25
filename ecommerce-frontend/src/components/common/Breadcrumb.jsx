@@ -4,7 +4,6 @@ import { Link, useLocation } from 'react-router-dom';
 
 export const Breadcrumb = ({ 
   items = [],
-  separator = '/',
   showHome = true,
   homeText = 'Home',
   homePath = '/',
@@ -42,10 +41,7 @@ export const Breadcrumb = ({
   // Use provided items or generate from URL
   let breadcrumbItems = items.length > 0 ? items : generateFromPath();
   
-  // Add home item if enabled
-  if (showHome && (breadcrumbItems.length > 0 || items.length === 0)) {
-    breadcrumbItems = [{ name: homeText, path: homePath }, ...breadcrumbItems];
-  }
+  
   
   // Don't show breadcrumb if only home exists and no other items
   if (breadcrumbItems.length <= 1) {
@@ -71,9 +67,6 @@ export const Breadcrumb = ({
                     {item.icon && <span className="breadcrumb-icon">{item.icon}</span>}
                     {item.name}
                   </Link>
-                  <span className="breadcrumb-separator" aria-hidden="true">
-                    {separator}
-                  </span>
                 </>
               )}
             </li>

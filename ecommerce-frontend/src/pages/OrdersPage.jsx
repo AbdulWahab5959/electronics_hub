@@ -1,8 +1,8 @@
 // src/pages/OrdersPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
-import { Breadcrumb } from '../../components/common/Breadcrumb';
+import { useAuth } from '../hooks/useAuth';
+import { Breadcrumb } from '../components/common/Breadcrumb';
 
 export default function OrdersPage() {
   const { user, isAuthenticated } = useAuth();
@@ -238,27 +238,29 @@ export default function OrdersPage() {
 
                   {/* Order Footer */}
                   <div className="order-footer">
-                    <div className="order-summary">
-                      <div className="summary-row">
-                        <span>Items:</span>
-                        <strong>{itemCount}</strong>
-                      </div>
-                      <div className="summary-row">
-                        <span>Total:</span>
-                        <strong className="total-price">
-                          ${order.total.toFixed(2)}
-                        </strong>
-                      </div>
-                    </div>
-                    <Link 
-                      to={`/orders/${order.order_number}`} 
-                      className="view-order-btn"
-                    >
-                      View Details
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M5 12h14M12 5l7 7-7 7"/>
-                      </svg>
-                    </Link>
+  <div className="order-page-summary">
+    <div className="summary-row">
+      <span>Items</span>
+      <strong>{itemCount}</strong>
+    </div>
+    <div className="summary-divider" />
+    <div className="summary-row">
+      <span>Order total</span>
+      <strong className="total-price">
+        ${order.total.toFixed(2)}
+      </strong>
+    </div>
+  </div>
+
+  <Link to={`/orders/${order.order_number}`} className="view-order-btn">
+    <span className="btn-icon-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M5 12h14M12 5l7 7-7 7"/>
+      </svg>
+    </span>
+    <span className="btn-label">View Details</span>
+    <span className="btn-arrow">↗</span>
+  </Link>
                   </div>
                 </div>
               );

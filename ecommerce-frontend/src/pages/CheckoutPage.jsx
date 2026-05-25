@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/common/ToastNotification';
 import { Breadcrumb } from '../components/common/Breadcrumb';
 import { OrderSummary } from '../components/common/OrderSummary';
-import { Button } from '../components/common/Button';
+import { getProfile, getAddresses } from '../services/user';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -16,13 +16,12 @@ export default function CheckoutPage() {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [orderPlaced, setOrderPlaced] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
-  // Form state - Shipping Info
+  // Form state - Shipping Info (single full name)
   const [shippingInfo, setShippingInfo] = useState({
-    firstName: user?.name?.split(' ')[0] || '',
-    lastName: user?.name?.split(' ')[1] || '',
-    email: user?.email || '',
+    fullName: '',
+    email: '',
     phone: '',
     address: '',
     apartment: '',
@@ -32,7 +31,7 @@ export default function CheckoutPage() {
     country: 'PK',
   });
 
-  // Form state - Payment Info
+  // Payment info
   const [paymentInfo, setPaymentInfo] = useState({
     method: 'card',
     cardName: '',
@@ -49,7 +48,7 @@ export default function CheckoutPage() {
   // Form errors
   const [errors, setErrors] = useState({});
 
-  // Redirect if cart is empty
+  // Load user profile and default address on mount
   useEffect(() => {
     if (!isAuthenticated) {
       showToast('Please login to continue checkout', 'warning');
@@ -59,8 +58,49 @@ export default function CheckoutPage() {
     if (cartItems.length === 0) {
       showToast('Your cart is empty', 'warning');
       navigate('/cart');
+      return;
     }
-  }, [cartItems, isAuthenticated, navigate]);
+    loadUserData();
+  }, [isAuthenticated, cartItems, navigate]);
+
+  const loadUserData = async () => {
+    setLoadingProfile(true);
+    try {
+      // 1. Fetch full profile (includes phone, name)
+      const profileRes = await getProfile();
+      const userData = profileRes.data.data.user;
+
+      // 2. Fetch addresses and find default
+      const addressesRes = await getAddresses();
+      const addresses = addressesRes.data.data;
+      const defaultAddress = addresses.find(addr => addr.is_default) || addresses[0];
+
+      setShippingInfo(prev => ({
+        ...prev,
+        fullName: userData.name || '',
+        email: userData.email || '',
+        phone: userData.phone || '',
+        address: defaultAddress?.address || '',
+        city: defaultAddress?.city || '',
+        state: defaultAddress?.state || '',
+        zipCode: defaultAddress?.zip_code || '',
+        country: defaultAddress?.country || 'PK',
+        // apartment is not in DB schema, kept separate for user input
+      }));
+    } catch (error) {
+      console.error('Failed to load profile/addresses', error);
+      // Fallback: use auth user data if available
+      if (user) {
+        setShippingInfo(prev => ({
+          ...prev,
+          fullName: user.name || '',
+          email: user.email || '',
+        }));
+      }
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   // Calculate totals
   const subtotal = cartTotal;
@@ -68,7 +108,6 @@ export default function CheckoutPage() {
   const tax = subtotal * 0.08;
   const total = subtotal + shipping + tax;
 
-  // Handle shipping form change
   const handleShippingChange = (e) => {
     setShippingInfo({ ...shippingInfo, [e.target.name]: e.target.value });
     if (errors[e.target.name]) {
@@ -76,7 +115,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // Handle payment form change
   const handlePaymentChange = (e) => {
     setPaymentInfo({ ...paymentInfo, [e.target.name]: e.target.value });
     if (errors[e.target.name]) {
@@ -84,23 +122,22 @@ export default function CheckoutPage() {
     }
   };
 
-  // Validate Step 1 - Shipping
+  // Validate Step 1 – Shipping
   const validateStep1 = () => {
     const newErrors = {};
-    if (!shippingInfo.firstName) newErrors.firstName = 'First name required';
-    if (!shippingInfo.lastName) newErrors.lastName = 'Last name required';
+    if (!shippingInfo.fullName) newErrors.fullName = 'Full name required';
     if (!shippingInfo.email) newErrors.email = 'Email required';
     if (!shippingInfo.phone) newErrors.phone = 'Phone required';
     if (!shippingInfo.address) newErrors.address = 'Address required';
     if (!shippingInfo.city) newErrors.city = 'City required';
-    if (!shippingInfo.state) newErrors.state = 'State/Povince required';
+    if (!shippingInfo.state) newErrors.state = 'State/Province required';
     if (!shippingInfo.zipCode) newErrors.zipCode = 'ZIP code required';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Validate Step 2 - Payment
+  // Validate Step 2 – Payment (only card)
   const validateStep2 = () => {
     if (paymentInfo.method === 'card') {
       const newErrors = {};
@@ -114,31 +151,28 @@ export default function CheckoutPage() {
     return true;
   };
 
-  // Handle next step
   const handleNext = () => {
     if (currentStep === 1 && validateStep1()) {
       setCurrentStep(2);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (currentStep === 2 && validateStep2()) {
+      setCurrentStep(3);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
-  // Handle back step
   const handleBack = () => {
     setCurrentStep(currentStep - 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Handle place order
   const handlePlaceOrder = async () => {
-    if (!validateStep2()) return;
-
     setIsProcessing(true);
 
-    // Prepare order data
     const orderData = {
       order_number: 'ORD-' + Date.now(),
       customer: {
-        name: `${shippingInfo.firstName} ${shippingInfo.lastName}`,
+        name: shippingInfo.fullName,
         email: shippingInfo.email,
         phone: shippingInfo.phone,
       },
@@ -160,44 +194,30 @@ export default function CheckoutPage() {
       created_at: new Date().toISOString(),
     };
 
-    // Save order to localStorage (temporary - replace with API call)
+    // Save to localStorage (replace with API call later)
     const existingOrders = JSON.parse(localStorage.getItem('orders') || '[]');
     existingOrders.unshift(orderData);
     localStorage.setItem('orders', JSON.stringify(existingOrders));
 
-    // Simulate API call
     setTimeout(() => {
       clearCart();
       setIsProcessing(false);
-      setOrderPlaced(true);
-      
-      // Store order confirmation data
-      localStorage.setItem('lastOrder', JSON.stringify(orderData));
-      
       showToast('Order placed successfully!', 'success');
       navigate('/order-success', { state: { order: orderData } });
-    }, 2000);
+    }, 1500);
   };
 
-  // Format card number with spaces
   const formatCardNumber = (value) => {
     const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
     const matches = v.match(/\d{4,16}/g);
     const match = (matches && matches[0]) || '';
     const parts = [];
-
     for (let i = 0, len = match.length; i < len; i += 4) {
       parts.push(match.substring(i, i + 4));
     }
-
-    if (parts.length) {
-      return parts.join(' ');
-    } else {
-      return value;
-    }
+    return parts.length ? parts.join(' ') : value;
   };
 
-  // Format expiry date
   const formatExpiry = (value) => {
     const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
     if (v.length >= 2) {
@@ -206,29 +226,21 @@ export default function CheckoutPage() {
     return v;
   };
 
-  // Handle card number input
   const handleCardNumberChange = (e) => {
     const formatted = formatCardNumber(e.target.value);
     setPaymentInfo({ ...paymentInfo, cardNumber: formatted });
   };
 
-  // Handle expiry input
   const handleExpiryChange = (e) => {
     const formatted = formatExpiry(e.target.value);
     setPaymentInfo({ ...paymentInfo, cardExpiry: formatted });
   };
 
-  if (orderPlaced) {
+  if (loadingProfile) {
     return (
       <div className="checkout-page">
         <div className="container">
-          <div className="order-success">
-            <div className="success-icon">✓</div>
-            <h2>Order Placed Successfully!</h2>
-            <p>Thank you for your purchase. You will receive a confirmation email shortly.</p>
-            <Link to="/orders" className="btn-primary">View Orders</Link>
-            <Link to="/shop" className="btn-secondary">Continue Shopping</Link>
-          </div>
+          <div className="loading-spinner">Loading your information...</div>
         </div>
       </div>
     );
@@ -237,8 +249,7 @@ export default function CheckoutPage() {
   return (
     <div className="checkout-page">
       <div className="container">
-        {/* Breadcrumb */}
-        <Breadcrumb 
+        <Breadcrumb
           items={[
             { name: 'Home', path: '/' },
             { name: 'Cart', path: '/cart' },
@@ -246,7 +257,6 @@ export default function CheckoutPage() {
           ]}
         />
 
-        {/* Page Header */}
         <div className="checkout-header">
           <h1>Checkout</h1>
           <p>Complete your order</p>
@@ -270,7 +280,6 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* Checkout Content */}
         <div className="checkout-content">
           {/* Form Section */}
           <div className="checkout-form-section">
@@ -278,30 +287,17 @@ export default function CheckoutPage() {
             {currentStep === 1 && (
               <div className="checkout-card">
                 <h2>Shipping Information</h2>
-                
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>First Name *</label>
-                    <input
-                      type="text"
-                      name="firstName"
-                      value={shippingInfo.firstName}
-                      onChange={handleShippingChange}
-                      className={errors.firstName ? 'error' : ''}
-                    />
-                    {errors.firstName && <span className="error-msg">{errors.firstName}</span>}
-                  </div>
-                  <div className="form-group">
-                    <label>Last Name *</label>
-                    <input
-                      type="text"
-                      name="lastName"
-                      value={shippingInfo.lastName}
-                      onChange={handleShippingChange}
-                      className={errors.lastName ? 'error' : ''}
-                    />
-                    {errors.lastName && <span className="error-msg">{errors.lastName}</span>}
-                  </div>
+
+                <div className="form-group">
+                  <label>Full Name *</label>
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={shippingInfo.fullName}
+                    onChange={handleShippingChange}
+                    className={errors.fullName ? 'error' : ''}
+                  />
+                  {errors.fullName && <span className="error-msg">{errors.fullName}</span>}
                 </div>
 
                 <div className="form-row">
@@ -323,7 +319,6 @@ export default function CheckoutPage() {
                       name="phone"
                       value={shippingInfo.phone}
                       onChange={handleShippingChange}
-                      placeholder="(123) 456-7890"
                       className={errors.phone ? 'error' : ''}
                     />
                     {errors.phone && <span className="error-msg">{errors.phone}</span>}
@@ -337,7 +332,6 @@ export default function CheckoutPage() {
                     name="address"
                     value={shippingInfo.address}
                     onChange={handleShippingChange}
-                    placeholder="House number and street name"
                     className={errors.address ? 'error' : ''}
                   />
                   {errors.address && <span className="error-msg">{errors.address}</span>}
@@ -450,7 +444,6 @@ export default function CheckoutPage() {
                         value={paymentInfo.cardName}
                         onChange={handlePaymentChange}
                         className={errors.cardName ? 'error' : ''}
-                        placeholder="John Doe"
                       />
                       {errors.cardName && <span className="error-msg">{errors.cardName}</span>}
                     </div>
@@ -536,7 +529,8 @@ export default function CheckoutPage() {
                   {!sameAsShipping && (
                     <div className="billing-form">
                       <h3>Billing Address</h3>
-                      {/* Add billing address fields here - similar to shipping */}
+                      {/* You can add billing address fields here similar to shipping */}
+                      <p className="info-text">Billing address fields would go here.</p>
                     </div>
                   )}
                 </div>
@@ -562,12 +556,12 @@ export default function CheckoutPage() {
             {currentStep === 3 && (
               <div className="checkout-card">
                 <h2>Review Your Order</h2>
-                
+
                 <div className="order-review">
                   <div className="review-section">
                     <h3>Shipping Address</h3>
                     <p>
-                      {shippingInfo.firstName} {shippingInfo.lastName}<br />
+                      {shippingInfo.fullName}<br />
                       {shippingInfo.address}<br />
                       {shippingInfo.apartment && <>{shippingInfo.apartment}<br /></>}
                       {shippingInfo.city}, {shippingInfo.state} {shippingInfo.zipCode}<br />
@@ -585,7 +579,7 @@ export default function CheckoutPage() {
                       {paymentInfo.method === 'paypal' && 'PayPal'}
                       {paymentInfo.method === 'cod' && 'Cash on Delivery'}
                     </p>
-                    {paymentInfo.method === 'card' && (
+                    {paymentInfo.method === 'card' && paymentInfo.cardNumber && (
                       <p>Card ending in {paymentInfo.cardNumber.slice(-4)}</p>
                     )}
                     <button className="edit-link" onClick={() => setCurrentStep(2)}>Edit</button>

@@ -41,23 +41,27 @@ class ProfileController extends Controller
      * PUT /api/profile
      */
     public function update(Request $request)
-    {
-        $user = $request->user();
-        
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'phone' => 'sometimes|numeric|digits_between:7,15',
-            'bio' => 'sometimes|string|max:500',
-        ]);
-        
-        $user->update($validated);
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Profile updated successfully',
-            'data' => $user
-        ]);
-    }
+{
+    $user = $request->user();
+
+    $validated = $request->validate([
+        'name' => 'sometimes|string|max:255',
+        'phone' => ['nullable', 'numeric', 'digits_between:7,15'],
+        'bio' => ['nullable', 'string', 'max:500'],
+    ]);
+
+    // Convert empty strings to null for phone & bio
+    $validated['phone'] = $validated['phone'] ?? null;
+    $validated['bio'] = $validated['bio'] ?? null;
+
+    $user->update($validated);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Profile updated successfully',
+        'data' => $user
+    ]);
+}
     
     /**
      * Change user password
