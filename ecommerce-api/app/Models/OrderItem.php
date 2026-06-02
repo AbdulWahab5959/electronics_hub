@@ -11,34 +11,34 @@ class OrderItem extends Model
 
     /**
      * The attributes that are mass assignable.
-     * 
-     * These fields can be filled when creating/updating an order item
      */
     protected $fillable = [
-        'order_id',      // Which order this item belongs to
-        'product_id',    // Which product was purchased (optional, can be null)
-        'name',          // Product name (snapshot at purchase time)
-        'price',         // Price paid (snapshot at purchase time)
-        'quantity',      // How many of this product
+        'order_id',
+        'product_id',
+        'name',
+        'price',
+        'quantity',
     ];
 
     /**
      * The attributes that should be cast.
      */
     protected $casts = [
-        'price' => 'decimal:2',  // Ensures 2 decimal places
+        'price' => 'decimal:2',
+        'quantity' => 'integer',
     ];
 
     /**
-     * RELATIONSHIPS
-     * Connect order item to order and product
+     * The accessors to append to the model's array form.
      */
+    protected $appends = ['subtotal', 'formatted_subtotal', 'formatted_price'];
+
+    // ============================================
+    // RELATIONSHIPS
+    // ============================================
 
     /**
-     * An order item belongs to an order
-     * Foreign key: order_id
-     * 
-     * This allows: $orderItem->order to get the parent order
+     * An order item belongs to an order.
      */
     public function order()
     {
@@ -46,28 +46,19 @@ class OrderItem extends Model
     }
 
     /**
-     * An order item belongs to a product (optional)
-     * Foreign key: product_id
-     * 
-     * This allows: $orderItem->product to get full product details
-     * Note: product_id can be null if product is deleted later
+     * An order item belongs to a product (optional).
      */
     public function product()
     {
         return $this->belongsTo(Product::class);
     }
 
-    /**
-     * HELPER METHODS
-     * Convenience functions for calculations
-     */
+    // ============================================
+    // ACCESSORS
+    // ============================================
 
     /**
-     * Calculate subtotal for this order item
-     * price × quantity
-     * 
-     * Usage: $orderItem->subtotal
-     * Returns: $299.99 (if price=99.99, quantity=3)
+     * Calculate subtotal for this order item (price × quantity).
      */
     public function getSubtotalAttribute()
     {
@@ -75,10 +66,7 @@ class OrderItem extends Model
     }
 
     /**
-     * Get formatted subtotal with currency
-     * 
-     * Usage: $orderItem->formatted_subtotal
-     * Returns: "$299.99"
+     * Get formatted subtotal with currency.
      */
     public function getFormattedSubtotalAttribute()
     {
@@ -86,10 +74,7 @@ class OrderItem extends Model
     }
 
     /**
-     * Get formatted price with currency
-     * 
-     * Usage: $orderItem->formatted_price
-     * Returns: "$99.99"
+     * Get formatted price with currency.
      */
     public function getFormattedPriceAttribute()
     {

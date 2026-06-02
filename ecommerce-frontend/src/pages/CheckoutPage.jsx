@@ -7,6 +7,7 @@ import { useToast } from '../components/common/ToastNotification';
 import { Breadcrumb } from '../components/common/Breadcrumb';
 import { OrderSummary } from '../components/common/OrderSummary';
 import { getProfile, getAddresses } from '../services/user';
+import { createOrder } from '../services/order'; // Import API function
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -169,42 +170,46 @@ export default function CheckoutPage() {
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
 
-    const orderData = {
-      order_number: 'ORD-' + Date.now(),
-      customer: {
-        name: shippingInfo.fullName,
-        email: shippingInfo.email,
-        phone: shippingInfo.phone,
-      },
-      shipping_address: shippingInfo,
-      billing_address: sameAsShipping ? shippingInfo : billingInfo,
-      payment_method: paymentInfo.method,
-      items: cartItems.map(item => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        image: item.image,
-      })),
-      subtotal: subtotal,
-      shipping: shipping,
-      tax: tax,
-      total: total,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-    };
+    try {
+      // Prepare payload for backend API
+      const payload = {
+        shipping_address: {
+          fullName: shippingInfo.fullName,
+          address: shippingInfo.address,
+          apartment: shippingInfo.apartment || '',
+          city: shippingInfo.city,
+          state: shippingInfo.state,
+          zipCode: shippingInfo.zipCode,
+          country: shippingInfo.country,
+          phone: shippingInfo.phone,
+          email: shippingInfo.email,
+        },
+        payment_method: paymentInfo.method,
+        shipping_cost: shipping,
+        tax: tax,
+        items: cartItems.map(item => ({
+          product_id: item.id,          // assuming cart item has `id` = product_id
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        })),
+      };
 
-    // Save to localStorage (replace with API call later)
-    const existingOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    existingOrders.unshift(orderData);
-    localStorage.setItem('orders', JSON.stringify(existingOrders));
+      const response = await createOrder(payload);
+      const createdOrder = response.data.data; // backend returns { success, message, data }
 
-    setTimeout(() => {
+      // Clear cart after successful order
       clearCart();
-      setIsProcessing(false);
+
       showToast('Order placed successfully!', 'success');
-      navigate('/order-success', { state: { order: orderData } });
-    }, 1500);
+      navigate('/order-success', { state: { order: createdOrder } });
+    } catch (error) {
+      console.error('Order placement failed:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to place order. Please try again.';
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const formatCardNumber = (value) => {
@@ -240,7 +245,10 @@ export default function CheckoutPage() {
     return (
       <div className="checkout-page">
         <div className="container">
-          <div className="loading-spinner">Loading your information...</div>
+          <div className="search-loading">
+            <div className="loading-spinner"></div>
+            <span>Loading your information...</span>
+          </div>
         </div>
       </div>
     );

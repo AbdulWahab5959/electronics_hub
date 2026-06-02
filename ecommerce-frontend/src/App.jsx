@@ -36,14 +36,14 @@ function App() {
   const { products, loading, error } = useProductData();
 
   // Show a loading indicator while products are being fetched
-  if (loading) {
-    return (
-      <div className="global-loader">
-        <div className="loader-spinner-premium loader-lg"></div>
-        <p>Loading products...</p>
-      </div>
-    );
-  }
+  // if (loading) {
+  //   return (
+  //     <div className="global-loader">
+  //       <div className="loader-spinner-premium loader-lg"></div>
+  //       <p>Loading products...</p>
+  //     </div>
+  //   );
+  // }
 
   // Even if there's an error, we still render the app with empty products
   if (error) {
@@ -99,7 +99,7 @@ function App() {
                   } 
                 />
                 <Route 
-                  path="/orders/:id" 
+                  path="/orders/:orderNumber"  
                   element={
                     <ProtectedRoute>
                       <OrderDetailPage />

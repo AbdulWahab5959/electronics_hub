@@ -1075,7 +1075,11 @@
   animation: spin 0.8s linear infinite; /* FIX: @keyframes spin was missing */
   flex-shrink: 0;
 }
-
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -1516,10 +1520,6 @@
 .quantity-selector-premium.disabled .qs-controls {
   background: #f3f4f6;
 }
-
-/* ============================================ */
-/* LOADER PREMIUM STYLES
-/* ============================================ */
 
 /* --------------------------------------------
    SPINNER LOADER
@@ -3101,12 +3101,12 @@
   width: 16px;
   height: 16px;
   stroke: currentColor;
+ 
 }
 
 .pagination-prev:hover:not(.disabled),
 .pagination-next:hover:not(.disabled) {
-  background: var(--color-primary-600);
-  border-color: var(--color-primary-600);
+   background-color: black;
   color: white;
   transform: translateX(0);
 }
@@ -7378,17 +7378,6 @@
   text-align: center;
   padding: 4rem;
 }
-.loader-spinner-premium {
-  width: 48px;
-  height: 48px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 1rem;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
 /* Modal (if used) */
 .order-modal {
   position: fixed;
@@ -7986,6 +7975,8 @@
 }
 
 .save-btn {
+  margin-inline: auto;
+  width: fit-content;
   padding: 0.75rem;
   background: #3b82f6;
   color: white;
@@ -11291,7 +11282,7 @@
   color: #0f172a !important;
   background: #f8fafc !important;
 }
-
+/* 
 .spinner-small {
   display: inline-block !important;
   width: 14px !important;
@@ -11308,7 +11299,7 @@
   to {
     transform: rotate(360deg);
   }
-}
+} */
 
 /* ── 10. RESPONSIVE BREAKPOINTS ───────────────────────────────── */
 @media (max-width: 1100px) {

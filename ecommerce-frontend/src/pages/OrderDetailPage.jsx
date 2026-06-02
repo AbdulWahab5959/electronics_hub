@@ -4,10 +4,10 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/common/ToastNotification';
 import { Breadcrumb } from '../components/common/Breadcrumb';
-
+import api from '../services/api';
 
 export default function OrderDetailPage() {
-  const { orderNumber } = useParams();
+  const { orderNumber } = useParams(); // e.g., "ORD-ABC123"
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const showToast = useToast();
@@ -22,39 +22,61 @@ export default function OrderDetailPage() {
       navigate('/login');
       return;
     }
-    loadOrderDetails();
+    if (orderNumber) {
+      loadOrderDetails();
+    }
   }, [orderNumber, isAuthenticated]);
 
-  const loadOrderDetails = () => {
+  const loadOrderDetails = async () => {
     setLoading(true);
-    // Simulate API call – replace with actual backend call
-    const savedOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    const foundOrder = savedOrders.find(o => o.order_number === orderNumber);
-    
-    if (foundOrder) {
-      setOrder(foundOrder);
-      // Simulate tracking info (would come from API)
+    try {
+      const response = await api.get(`/orders/number/${orderNumber}`);
+      const orderData = response.data.data;
+      setOrder(orderData);
+
+      // Build tracking info based on order status and dates
+      const history = [
+        { date: orderData.created_at, status: 'Order placed', location: 'Online' }
+      ];
+      
+      if (orderData.status !== 'pending') {
+        history.push({
+          date: new Date(new Date(orderData.created_at).getTime() + 86400000).toISOString(),
+          status: 'Processing',
+          location: 'Warehouse'
+        });
+      }
+      if (orderData.status === 'shipped' || orderData.status === 'delivered') {
+        history.push({
+          date: new Date(new Date(orderData.created_at).getTime() + 2 * 86400000).toISOString(),
+          status: 'Shipped',
+          location: 'Distribution center'
+        });
+      }
+      if (orderData.status === 'delivered') {
+        history.push({
+          date: new Date().toISOString(),
+          status: 'Delivered',
+          location: 'Your address'
+        });
+      }
+
       setTrackingInfo({
         carrier: 'FastShip Express',
-        trackingNumber: 'TRK' + Math.floor(Math.random() * 1000000),
-        estimatedDelivery: new Date(Date.now() + 3 * 86400000).toLocaleDateString(),
-        status: foundOrder.status,
-        history: [
-          { date: foundOrder.created_at, status: 'Order placed', location: 'Online' },
-          { date: new Date(Date.now() - 2 * 86400000).toISOString(), status: 'Processing', location: 'Warehouse' },
-          ...(foundOrder.status === 'shipped' || foundOrder.status === 'delivered' ? [
-            { date: new Date(Date.now() - 1 * 86400000).toISOString(), status: 'Shipped', location: 'Distribution center' }
-          ] : []),
-          ...(foundOrder.status === 'delivered' ? [
-            { date: new Date().toISOString(), status: 'Delivered', location: 'Your address' }
-          ] : [])
-        ]
+        trackingNumber: 'TRK' + orderData.id,
+        estimatedDelivery: orderData.status === 'delivered' 
+          ? 'Delivered'
+          : new Date(Date.now() + 3 * 86400000).toLocaleDateString(),
+        status: orderData.status,
+        history: history
       });
-    } else {
-      showToast('Order not found', 'error');
+    } catch (error) {
+      console.error('Failed to load order:', error);
+      showToast(error.response?.data?.message || 'Order not found', 'error');
       navigate('/orders');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const getStatusBadge = (status) => {
@@ -95,6 +117,14 @@ export default function OrderDetailPage() {
   if (!order) return null;
 
   const statusBadge = getStatusBadge(order.status);
+  
+  // ✅ Parse all numeric values from strings to numbers
+  const subtotal = order.subtotal 
+    ? parseFloat(order.subtotal) 
+    : order.items.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
+  const shippingCost = parseFloat(order.shipping_cost ?? 0);
+  const tax = parseFloat(order.tax ?? 0);
+  const total = parseFloat(order.total);
 
   return (
     <div className="order-detail-page">
@@ -137,22 +167,22 @@ export default function OrderDetailPage() {
                 {order.items.map((item, idx) => (
                   <div key={idx} className="detail-item">
                     <div className="item-image">
-                      {item.image ? (
-                        <img src={item.image} alt={item.name} />
+                      {item.product?.image ? (
+                        <img src={item.product.image} alt={item.name} />
                       ) : (
                         <div className="image-placeholder">🛍️</div>
                       )}
                     </div>
                     <div className="item-details">
                       <h3>{item.name}</h3>
-                      <p className="item-sku">SKU: {item.id || 'N/A'}</p>
+                      <p className="item-sku">SKU: {item.product_id || 'N/A'}</p>
                       <div className="item-meta">
                         <span className="item-quantity">Qty: {item.quantity}</span>
-                        <span className="item-price">${item.price.toFixed(2)} each</span>
+                        <span className="item-price">${parseFloat(item.price).toFixed(2)} each</span>
                       </div>
                     </div>
                     <div className="item-total">
-                      <span>${(item.price * item.quantity).toFixed(2)}</span>
+                      <span>${(parseFloat(item.price) * item.quantity).toFixed(2)}</span>
                     </div>
                   </div>
                 ))}
@@ -160,19 +190,19 @@ export default function OrderDetailPage() {
               <div className="order-summary-detail">
                 <div className="summary-line">
                   <span>Subtotal</span>
-                  <span>${order.subtotal.toFixed(2)}</span>
+                  <span>${subtotal.toFixed(2)}</span>
                 </div>
                 <div className="summary-line">
                   <span>Shipping</span>
-                  <span>{order.shipping === 0 ? 'Free' : `$${order.shipping.toFixed(2)}`}</span>
+                  <span>{shippingCost === 0 ? 'Free' : `$${shippingCost.toFixed(2)}`}</span>
                 </div>
                 <div className="summary-line">
-                  <span>Tax (8%)</span>
-                  <span>${order.tax.toFixed(2)}</span>
+                  <span>Tax</span>
+                  <span>${tax.toFixed(2)}</span>
                 </div>
                 <div className="summary-line total-line">
                   <span>Total</span>
-                  <span>${order.total.toFixed(2)}</span>
+                  <span>${total.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -205,13 +235,13 @@ export default function OrderDetailPage() {
               <h2>Shipping Address</h2>
               <div className="address-detail">
                 <p>
-                  {order.shipping_address.fullName || order.customer.name}<br />
+                  {order.shipping_address.fullName || order.user?.name}<br />
                   {order.shipping_address.address}<br />
                   {order.shipping_address.apartment && <>{order.shipping_address.apartment}<br /></>}
                   {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.zipCode}<br />
                   {order.shipping_address.country}<br />
-                  Phone: {order.shipping_address.phone || order.customer.phone}<br />
-                  Email: {order.customer.email}
+                  Phone: {order.shipping_address.phone}<br />
+                  Email: {order.user?.email}
                 </p>
               </div>
             </div>

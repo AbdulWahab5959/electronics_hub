@@ -16,10 +16,16 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        $orders = $request->user()->orders()
-            ->with('items')
+        $orders = $request->user()
+            ->orders()
+            ->with(['items.product', 'user'])  // load product images & user details
             ->orderBy('created_at', 'desc')
             ->get();
+
+        // Append computed subtotal for each order
+        $orders->each(function ($order) {
+            $order->append('subtotal');
+        });
 
         return response()->json([
             'success' => true,
@@ -28,12 +34,13 @@ class OrderController extends Controller
     }
 
     /**
-     * Get single order details
+     * Get single order details by ID
      * GET /api/orders/{id}
      */
     public function show($id)
     {
-        $order = Order::with('items')->findOrFail($id);
+        $order = Order::with(['items.product', 'user'])
+            ->findOrFail($id);
 
         // Ensure user owns this order
         if ($order->user_id !== auth()->id()) {
@@ -43,14 +50,44 @@ class OrderController extends Controller
             ], 403);
         }
 
+        $order->append('subtotal');
+
         return response()->json([
             'success' => true,
             'data' => $order
         ]);
     }
 
-    // In app/Http/Controllers/Api/OrderController.php
+    /**
+     * Get single order details by order number (human-readable)
+     * GET /api/orders/number/{orderNumber}
+     */
+    public function showByNumber($orderNumber)
+    {
+        $order = Order::where('order_number', $orderNumber)
+            ->with(['items.product', 'user'])
+            ->firstOrFail();
 
+        // Ensure user owns this order
+        if ($order->user_id !== auth()->id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+
+        $order->append('subtotal');
+
+        return response()->json([
+            'success' => true,
+            'data' => $order
+        ]);
+    }
+
+    /**
+     * Create a new order (checkout)
+     * POST /api/orders
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -97,7 +134,8 @@ class OrderController extends Controller
         // (Optional) Clear backend cart if you later decide to use it
         // Cart::where('user_id', $request->user()->id)->delete();
 
-        $order->load('items');
+        $order->load(['items.product', 'user']);
+        $order->append('subtotal');
 
         return response()->json([
             'success' => true,
@@ -107,7 +145,7 @@ class OrderController extends Controller
     }
 
     /**
-     * Cancel pending order
+     * Cancel a pending order
      * POST /api/orders/{id}/cancel
      */
     public function cancel(Request $request, $id)
@@ -127,14 +165,16 @@ class OrderController extends Controller
     }
 
     /**
-     * Track order by order number (no login required)
+     * Track order by order number (public, no login required)
      * GET /api/orders/track/{orderNumber}
      */
     public function track($orderNumber)
     {
         $order = Order::where('order_number', $orderNumber)
-            ->with('items')
+            ->with(['items.product', 'user'])
             ->firstOrFail();
+
+        $order->append('subtotal');
 
         return response()->json([
             'success' => true,

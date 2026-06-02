@@ -39,8 +39,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::post('/change-password', [ProfileController::class, 'changePassword']);
-        Route::post('/user/avatar', [ProfileController::class, 'uploadAvatar']);
-
+    Route::post('/user/avatar', [ProfileController::class, 'uploadAvatar']);
     
     // Addresses
     Route::get('/addresses', [ProfileController::class, 'addresses']);
@@ -50,8 +49,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Orders
     Route::get('/orders', [OrderController::class, 'index']);
-    Route::get('/orders/{id}', [OrderController::class, 'show']);
+    Route::get('/orders/{id}', [OrderController::class, 'show']);               // fetch by numeric ID
+    Route::get('/orders/number/{orderNumber}', [OrderController::class, 'showByNumber']); // fetch by order_number string
     Route::post('/orders', [OrderController::class, 'store']);
+    Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);     // cancel pending order
     
     // Cart (if using backend cart)
     Route::get('/cart', [CartController::class, 'index']);
@@ -78,3 +79,8 @@ Route::get('/products/{id}', [ProductController::class, 'show']);
 
 Route::get('/categories', [ProductController::class, 'categories']);
 Route::get('/brands', [ProductController::class, 'brands']);
+
+// ============================================
+// PUBLIC ORDER TRACKING (no auth required)
+// ============================================
+Route::get('/orders/track/{orderNumber}', [OrderController::class, 'track']);

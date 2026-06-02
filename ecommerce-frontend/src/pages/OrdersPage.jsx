@@ -3,9 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Breadcrumb } from '../components/common/Breadcrumb';
+import { getOrders } from '../services/order'; // Import API function
+import { useToast } from '../components/common/ToastNotification'; // Optional, for error feedback
 
 export default function OrdersPage() {
   const { user, isAuthenticated } = useAuth();
+  const showToast = useToast(); // If you have toast context; otherwise remove
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -22,22 +25,25 @@ export default function OrdersPage() {
   ];
 
   useEffect(() => {
-    loadOrders();
-  }, []);
+    if (isAuthenticated) {
+      loadOrders();
+    }
+  }, [isAuthenticated]);
 
-  const loadOrders = () => {
+  const loadOrders = async () => {
     setLoading(true);
-    
-    // Load orders from localStorage (replace with API call)
-    const savedOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    
-    // Sort by date (newest first)
-    const sortedOrders = savedOrders.sort((a, b) => 
-      new Date(b.created_at) - new Date(a.created_at)
-    );
-    
-    setOrders(sortedOrders);
-    setLoading(false);
+    try {
+      const response = await getOrders();
+      // ✅ response.data.data is the actual orders array
+      const ordersData = Array.isArray(response.data.data) ? response.data.data : [];
+      setOrders(ordersData);
+    } catch (error) {
+      console.error('Failed to load orders:', error);
+      setOrders([]);
+      if (showToast) showToast('Failed to load your orders', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -62,8 +68,8 @@ export default function OrdersPage() {
     return icons[status] || '📦';
   };
 
-  const filteredOrders = filter === 'all' 
-    ? orders 
+  const filteredOrders = filter === 'all'
+    ? orders
     : orders.filter(order => order.status === filter);
 
   // Format date
@@ -100,7 +106,7 @@ export default function OrdersPage() {
     <div className="orders-page">
       <div className="container">
         {/* Breadcrumb */}
-        <Breadcrumb 
+        <Breadcrumb
           items={[
             { name: 'Home', path: '/' },
             { name: 'My Account', path: '/dashboard' },
@@ -177,7 +183,7 @@ export default function OrdersPage() {
             <div className="empty-icon">📭</div>
             <h3>No orders found</h3>
             <p>
-              {filter === 'all' 
+              {filter === 'all'
                 ? "You haven't placed any orders yet."
                 : `No ${filter} orders found.`}
             </p>
@@ -188,7 +194,7 @@ export default function OrdersPage() {
             {filteredOrders.map((order) => {
               const statusBadge = getStatusBadge(order.status);
               const itemCount = getItemCount(order.items);
-              
+
               return (
                 <div key={order.order_number} className="order-card">
                   {/* Order Header */}
@@ -214,8 +220,9 @@ export default function OrdersPage() {
                     {order.items.slice(0, 3).map((item, idx) => (
                       <div key={idx} className="preview-item">
                         <div className="preview-image-placeholder">
-                          {item.image ? (
-                            <img src={item.image} alt={item.name} />
+                          {/* Use product image if available, fallback to icon */}
+                          {item.product?.image ? (
+                            <img src={item.product.image} alt={item.name} />
                           ) : (
                             <span>🛍️</span>
                           )}
@@ -238,29 +245,30 @@ export default function OrdersPage() {
 
                   {/* Order Footer */}
                   <div className="order-footer">
-  <div className="order-page-summary">
-    <div className="summary-row">
-      <span>Items</span>
-      <strong>{itemCount}</strong>
-    </div>
-    <div className="summary-divider" />
-    <div className="summary-row">
-      <span>Order total</span>
-      <strong className="total-price">
-        ${order.total.toFixed(2)}
-      </strong>
-    </div>
-  </div>
+                    <div className="order-page-summary">
+                      <div className="summary-row">
+                        <span>Items</span>
+                        <strong>{itemCount}</strong>
+                      </div>
+                      <div className="summary-divider" />
+                      <div className="summary-row">
+                        <span>Order total</span>
+                        <strong className="total-price">
+                          ${parseFloat(order.total).toFixed(2)}  
+                        </strong>
+                      </div>
+                    </div>
 
-  <Link to={`/orders/${order.order_number}`} className="view-order-btn">
-    <span className="btn-icon-wrap">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <path d="M5 12h14M12 5l7 7-7 7"/>
-      </svg>
-    </span>
-    <span className="btn-label">View Details</span>
-    <span className="btn-arrow">↗</span>
-  </Link>
+                    {/* Link uses order_number (backend route: /orders/number/{orderNumber}) */}
+                    <Link to={`/orders/${order.order_number}`} className="view-order-btn">
+                      <span className="btn-icon-wrap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                      </span>
+                      <span className="btn-label">View Details</span>
+                      <span className="btn-arrow">↗</span>
+                    </Link>
                   </div>
                 </div>
               );
