@@ -1,5 +1,8 @@
 // src/components/common/Pagination.jsx
 import React, { useState, useEffect } from 'react';
+import { CaretLeft } from '@phosphor-icons/react/dist/csr/CaretLeft';
+import { CaretRight } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { Plus } from '@phosphor-icons/react/dist/csr/Plus';
 
 export const Pagination = ({
   currentPage = 1,
@@ -135,9 +138,7 @@ export const Pagination = ({
             disabled={page === 1}
             aria-label="Previous page"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M15 18l-6-6 6-6"/>
-            </svg>
+            <CaretLeft size={18} weight="regular" aria-hidden="true" />
             <span>Previous</span>
           </button>
           
@@ -174,9 +175,7 @@ export const Pagination = ({
             aria-label="Next page"
           >
             <span>Next</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
+            <CaretRight size={18} weight="regular" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -219,9 +218,7 @@ export const LoadMorePagination = ({
           </>
         ) : (
           <>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
+            <Plus size={18} weight="regular" aria-hidden="true" />
             {loadMoreText}
           </>
         )}

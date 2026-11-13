@@ -1,9 +1,20 @@
-// src/components/layout/Header.jsx
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { ArrowsLeftRight } from '@phosphor-icons/react/dist/csr/ArrowsLeftRight';
+import { CaretDown } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { Headset } from '@phosphor-icons/react/dist/csr/Headset';
+import { Heart } from '@phosphor-icons/react/dist/csr/Heart';
+import { List } from '@phosphor-icons/react/dist/csr/List';
+import { Receipt } from '@phosphor-icons/react/dist/csr/Receipt';
+import { ShoppingCartSimple } from '@phosphor-icons/react/dist/csr/ShoppingCartSimple';
+import { SignOut } from '@phosphor-icons/react/dist/csr/SignOut';
+import { Storefront } from '@phosphor-icons/react/dist/csr/Storefront';
+import { UserCircle } from '@phosphor-icons/react/dist/csr/UserCircle';
+import { X } from '@phosphor-icons/react/dist/csr/X';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
 import { SearchBar } from '../common/SearchBar';
+import { TechHubBrand } from '../common/TechHubBrand';
 import { useToast } from '../common/ToastNotification';
 
 export const Header = ({ products = [] }) => {
@@ -14,7 +25,6 @@ export const Header = ({ products = [] }) => {
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);   // controls overlay
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -23,14 +33,14 @@ export const Header = ({ products = [] }) => {
   }, []);
 
   useEffect(() => {
-    document.body.style.overflow = isMobileMenuOpen || isSearchOpen ? 'hidden' : 'auto';
-    return () => (document.body.style.overflow = 'auto');
-  }, [isMobileMenuOpen, isSearchOpen]);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = isMobileMenuOpen ? 'hidden' : previousOverflow;
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isMobileMenuOpen]);
 
-  const closeMenus = () => {
-    setIsMobileMenuOpen(false);
-    setIsSearchOpen(false);
-  };
+  const closeMenu = () => setIsMobileMenuOpen(false);
 
   const handleLogout = async () => {
     const result = await logout();
@@ -38,205 +48,174 @@ export const Header = ({ products = [] }) => {
       showToast(result.error, 'error');
       return;
     }
-    closeMenus();
+    closeMenu();
     navigate('/login');
   };
 
   const navLinks = [
-    { name: 'Dashboard', path: '/dashboard' },
+    ...(isAuthenticated
+      ? [
+          { name: 'Dashboard', path: '/dashboard' },
+          { name: 'Orders', path: '/orders' },
+        ]
+      : []),
     { name: 'Shop', path: '/shop' },
-    { name: 'Orders', path: '/orders' },
-    { name: 'Contact Us', path: '/contact' },
+    { name: 'Compare', path: '/compare' },
+    { name: 'Contact', path: '/contact' },
   ];
 
-  const Logo = () => (
-    <Link to="/" className="tech-logo" onClick={closeMenus}>
-      <div className="logo-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-          <line x1="8" y1="21" x2="16" y2="21" />
-          <line x1="12" y1="17" x2="12" y2="21" />
-          <circle cx="8" cy="10" r="1.5" fill="currentColor" stroke="none" />
-          <circle cx="16" cy="10" r="1.5" fill="currentColor" stroke="none" />
-        </svg>
-      </div>
-      <div className="logo-text">
-        <span className="logo-main">Tech<span className="logo-accent">Hub</span></span>
-        <span className="logo-tagline">Electronics Store</span>
-      </div>
-    </Link>
-  );
+  const mobileLinks = [
+    { name: 'Shop', path: '/shop', Icon: Storefront },
+    { name: 'Compare products', path: '/compare', Icon: ArrowsLeftRight },
+    { name: 'Wishlist', path: '/wishlist', Icon: Heart },
+    { name: 'Cart', path: '/cart', Icon: ShoppingCartSimple },
+    { name: 'Contact us', path: '/contact', Icon: Headset },
+    ...(isAuthenticated
+      ? [
+          { name: 'Dashboard', path: '/dashboard', Icon: Storefront },
+          { name: 'Orders', path: '/orders', Icon: Receipt },
+          { name: 'Profile', path: '/profile', Icon: UserCircle },
+        ]
+      : []),
+  ];
 
   return (
     <header className={`tech-header ${isScrolled ? 'header-scrolled' : ''}`}>
-      {/* Top bar (unchanged) */}
-      <div className="tech-top-bar">
-        <div className="container">
-          <div className="top-bar-content">
-            <div className="top-bar-marquee">
-              <span className="marquee-icon">⚡</span>
-              <span className="marquee-text">
-                Free 2-Day Delivery on Orders $100+ | 24-Month Warranty on All Electronics | Price Match Guarantee
-              </span>
-              <span className="marquee-icon">⚡</span>
-            </div>
-            <div className="top-bar-links">
-              <Link to="/track-order">Track Order</Link>
-              <Link to="/support">Support</Link>
-              <Link to="/business">Business Store</Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main header row – single line */}
+  
       <div className="tech-main-header">
         <div className="container">
           <div className="main-header-content">
-            <Logo />
+            <TechHubBrand className="header-brand" onClick={closeMenu} />
 
-            {/* Desktop navigation */}
             <div className="tech-nav-bar">
-              <nav className="tech-nav">
+              <nav className="tech-nav" aria-label="Main navigation">
                 <div className="nav-links">
                   {navLinks.map((link) => (
-                    <Link key={link.name} to={link.path} className="nav-link">
-                      <span>{link.name}</span>
-                    </Link>
+                    <NavLink
+                      key={link.name}
+                      to={link.path}
+                      className={({ isActive }) =>
+                        `nav-link${isActive ? ' nav-link-active' : ''}`
+                      }
+                    >
+                      {link.name}
+                    </NavLink>
                   ))}
                 </div>
               </nav>
             </div>
 
-            {/* Actions + Search icon + Auth */}
+            <div className="header-search">
+              <SearchBar
+                products={products}
+                placeholder="Search products, brands, categories"
+              />
+            </div>
+
             <div className="tech-actions">
-              {/* Wishlist */}
-              <Link to="/wishlist" className="action-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                </svg>
+              <Link to="/wishlist" className="action-icon" aria-label="Wishlist">
+                <Heart size={20} weight="regular" aria-hidden="true" />
                 <span className="action-label">Wishlist</span>
               </Link>
 
-              {/* Cart */}
-              <Link to="/cart" className="action-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="9" cy="21" r="1" />
-                  <circle cx="20" cy="21" r="1" />
-                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                </svg>
+              <Link to="/cart" className="action-icon" aria-label="Cart">
+                <ShoppingCartSimple size={20} weight="regular" aria-hidden="true" />
                 <span className="action-label">Cart</span>
                 {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
               </Link>
 
-              {/* 🔍 SEARCH ICON (opens overlay) */}
-              <button
-                type="button"
-                className="desktop-search-icon"
-                onClick={() => setIsSearchOpen(true)}
-                aria-label="Open search"
-              >
-                🔍
-              </button>
-
-              {/* User / Auth */}
               {isAuthenticated ? (
                 <div className="user-menu">
-                  <button type="button" className="user-trigger">
-                    <div className="user-avatar">{user?.name?.charAt(0).toUpperCase()}</div>
+                  <button
+                    type="button"
+                    className="user-trigger"
+                    aria-label={`Account: ${user?.name || 'profile'}`}
+                  >
+                    <span className="user-avatar">
+                      {user?.name?.charAt(0).toUpperCase()}
+                    </span>
                     <span className="user-name">{user?.name?.split(' ')[0]}</span>
-                    <svg className="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
+                    <CaretDown size={16} weight="regular" aria-hidden="true" />
                   </button>
                   <div className="user-dropdown">
                     <Link to="/profile">Profile</Link>
-                    <Link to="/support-tickets">Support Tickets</Link>
+                    <Link to="/orders">Orders</Link>
                     <hr />
-                    <button onClick={handleLogout}>Logout</button>
+                    <button type="button" onClick={handleLogout}>Sign out</button>
                   </div>
                 </div>
               ) : (
                 <div className="auth-buttons">
-                  <Link to="/login" className="btn-login">Login</Link>
-                  <Link to="/register" className="btn-signup">Sign Up</Link>
+                  <Link to="/login" className="btn-login">Sign in</Link>
+                  <Link to="/register" className="btn-signup">Create account</Link>
                 </div>
               )}
             </div>
 
-            {/* Mobile menu trigger */}
             <button
               type="button"
               className={`mobile-menu-trigger ${isMobileMenuOpen ? 'active' : ''}`}
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              aria-label="Open menu"
+              onClick={() => setIsMobileMenuOpen((open) => !open)}
+              aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-navigation"
             >
-              <span></span><span></span><span></span>
+              {isMobileMenuOpen ? (
+                <X size={21} weight="regular" aria-hidden="true" />
+              ) : (
+                <List size={22} weight="regular" aria-hidden="true" />
+              )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* SEARCH OVERLAY (contains SearchBar) */}
-      {/* SEARCH OVERLAY (contains SearchBar) */}
-      {isSearchOpen && (
-        <div className="search-overlay" onClick={() => setIsSearchOpen(false)}>
-          <div className="search-overlay-box" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="search-close"
-              onClick={() => setIsSearchOpen(false)}
-              aria-label="Close search"
-            >
-              ✕
-            </button>
-            <SearchBar
-              products={products}
-              placeholder="Search products by name, brand, or category..."
-              onCloseOverlay={() => setIsSearchOpen(false)}   // <-- ADD THIS LINE
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Mobile menu panel (unchanged, but you can optionally replace its search form with SearchBar too) */}
       {isMobileMenuOpen && (
-        <div className="mobile-menu-overlay" onClick={() => setIsMobileMenuOpen(false)} />
+        <button
+          type="button"
+          className="mobile-menu-overlay"
+          onClick={closeMenu}
+          aria-label="Close navigation"
+        />
       )}
-      <div className={`mobile-menu-panel ${isMobileMenuOpen ? 'open' : ''}`}>
+
+      <div
+        id="mobile-navigation"
+        className={`mobile-menu-panel ${isMobileMenuOpen ? 'open' : ''}`}
+        aria-hidden={!isMobileMenuOpen}
+      >
         <div className="mobile-menu-header">
-          <Logo />
-          <button onClick={() => setIsMobileMenuOpen(false)}>✕</button>
+          <TechHubBrand onClick={closeMenu} />
+          <button type="button" onClick={closeMenu} aria-label="Close menu">
+            <X size={20} weight="regular" aria-hidden="true" />
+          </button>
         </div>
 
-        <div className="mobile-search">
-          <form onSubmit={(e) => { e.preventDefault(); /* handle mobile search */ }}>
-            <input type="text" placeholder="Search electronics..." />
-            <button type="submit">🔍</button>
-          </form>
-        </div>
-
-        <div className="mobile-section">
-          <Link to="/dashboard" onClick={closeMenus}>Dashboard</Link>
-          <Link to="/shop" onClick={closeMenus}>Shop</Link>
-          <Link to="/orders" onClick={closeMenus}>Orders</Link>
-          <Link to="/contact" onClick={closeMenus}>Contact Us</Link>
-          <Link to="/compare" onClick={closeMenus}>Compare Products</Link>
-          <Link to="/wishlist" onClick={closeMenus}>Wishlist</Link>
-          <Link to="/cart" onClick={closeMenus}>Cart</Link>
-          <Link to="/profile" onClick={closeMenus}>Profile</Link>
-          <Link to="/support-tickets" onClick={closeMenus}>Support Tickets</Link>
-          <Link to="/track-order" onClick={closeMenus}>Track Order</Link>
-          <Link to="/support" onClick={closeMenus}>Support</Link>
-        </div>
+        <nav className="mobile-section" aria-label="Mobile navigation">
+          {mobileLinks.map(({ name, path, Icon }) => (
+            <NavLink key={path} to={path} onClick={closeMenu}>
+              <Icon size={20} weight="regular" aria-hidden="true" />
+              <span>{name}</span>
+            </NavLink>
+          ))}
+        </nav>
 
         <div className="mobile-auth">
           {isAuthenticated ? (
-            <button onClick={handleLogout}>Logout</button>
+            <>
+              <div className="mobile-account">
+                <UserCircle size={22} weight="regular" aria-hidden="true" />
+                <span>Signed in as {user?.name || 'customer'}</span>
+              </div>
+              <button type="button" onClick={handleLogout}>
+                <SignOut size={18} weight="regular" aria-hidden="true" />
+                Sign out
+              </button>
+            </>
           ) : (
             <>
-              <Link to="/login" onClick={closeMenus}>Login</Link>
-              <Link to="/register" onClick={closeMenus}>Sign Up</Link>
+              <Link to="/login" onClick={closeMenu}>Sign in</Link>
+              <Link to="/register" onClick={closeMenu}>Create account</Link>
             </>
           )}
         </div>

@@ -34,7 +34,7 @@ import ResetPassword from './pages/auth/ResetPassword';
 import VerifyEmail from './pages/auth/VerifyEmail';
 
 function App() {
-  const { products, error } = useProductData();
+  const { products, loading, error } = useProductData();
 
   // Show a loading indicator while products are being fetched
   // if (loading) {
@@ -59,7 +59,7 @@ function App() {
             <Layout products={products}>   {/* pass products to Layout */}
               <Routes>
                 {/* Public Routes */}
-                <Route path="/" element={<HomePage />} />
+                <Route path="/" element={<HomePage products={products} loading={loading} error={error} />} />
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/contact" element={<ContactUs />} />
 

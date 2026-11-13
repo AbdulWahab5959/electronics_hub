@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MagnifyingGlass } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
+import { X } from '@phosphor-icons/react/dist/csr/X';
+import { formatMoney } from '../../utils/money';
 
 // Simple Levenshtein distance for spelling‑tolerant matching
 function levenshteinDistance(a, b) {
@@ -19,6 +22,45 @@ function levenshteinDistance(a, b) {
   return matrix[b.length][a.length];
 }
 
+const normalize = (text) =>
+  String(text || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s]/g, '');
+
+function getMatchScore(product, searchValue) {
+  const q = normalize(searchValue);
+  if (!q) return 0;
+
+  const name = normalize(product.name);
+  const brand = normalize(product.brand || '');
+  const category = normalize(product.category || '');
+  const keywords = normalize(product.keywords || '');
+
+  if (name === q) return 100;
+  if (brand === q) return 95;
+  if (category === q) return 90;
+  if (keywords.includes(q)) return 85;
+
+  if (name.startsWith(q)) return 80;
+  if (brand.startsWith(q)) return 70;
+  if (category.startsWith(q)) return 60;
+
+  if (name.includes(q)) return 50;
+  if (brand.includes(q)) return 40;
+  if (category.includes(q)) return 35;
+  if (keywords.includes(q)) return 30;
+
+  if (q.length > 2) {
+    const nameDist = levenshteinDistance(name.slice(0, q.length + 2), q);
+    const maxLen = Math.max(name.length, q.length);
+    const similarity = 1 - nameDist / maxLen;
+    if (similarity > 0.6) return Math.floor(similarity * 45);
+  }
+
+  return 0;
+}
+
 export const SearchBar = ({
   onSearch,
   products = [],
@@ -29,18 +71,15 @@ export const SearchBar = ({
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
-  const [recent, setRecent] = useState(recentSearches);
+  const [recent, setRecent] = useState(() => {
+    const savedRecent = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+    return savedRecent.length ? savedRecent : recentSearches;
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   const searchRef = useRef(null);
   const inputRef = useRef(null);
   const navigate = useNavigate();
-
-  // Load recent searches from localStorage on mount
-  useEffect(() => {
-    const savedRecent = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-    setRecent(savedRecent);
-  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -53,59 +92,12 @@ export const SearchBar = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Normalize text for consistent comparison
-  const normalize = (text) =>
-    String(text || '')
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s]/g, ''); // remove punctuation
-
-  // Enhanced matching: exact, startsWith, includes, fuzzy (Levenshtein)
-  const getMatchScore = (product, searchValue) => {
-    const q = normalize(searchValue);
-    if (!q) return 0;
-
-    const name = normalize(product.name);
-    const brand = normalize(product.brand || '');
-    const category = normalize(product.category || '');
-    const keywords = normalize(product.keywords || '');
-
-    // Exact match (highest priority)
-    if (name === q) return 100;
-    if (brand === q) return 95;
-    if (category === q) return 90;
-    if (keywords.includes(q)) return 85;
-
-    // Starts with
-    if (name.startsWith(q)) return 80;
-    if (brand.startsWith(q)) return 70;
-    if (category.startsWith(q)) return 60;
-
-    // Contains
-    if (name.includes(q)) return 50;
-    if (brand.includes(q)) return 40;
-    if (category.includes(q)) return 35;
-    if (keywords.includes(q)) return 30;
-
-    // Fuzzy (spelling tolerant) – only for longer queries
-    if (q.length > 2) {
-      const nameDist = levenshteinDistance(name.slice(0, q.length + 2), q);
-      const maxLen = Math.max(name.length, q.length);
-      const similarity = 1 - nameDist / maxLen;
-      if (similarity > 0.6) return Math.floor(similarity * 45);
-    }
-
-    return 0;
-  };
-
   // Filter products with debounce and loading indicator
   useEffect(() => {
     if (query.trim().length < 2) {
-      setSuggestions([]);
       return;
     }
 
-    setIsLoading(true);
     const timer = setTimeout(() => {
       const matchedProducts = products
         .map((product) => ({
@@ -122,7 +114,6 @@ export const SearchBar = ({
 
     return () => {
       clearTimeout(timer);
-      setIsLoading(false);
     };
   }, [query, products]);
 
@@ -143,6 +134,8 @@ export const SearchBar = ({
     const value = e.target.value;
     setQuery(value);
     setIsOpen(true);
+    setIsLoading(value.trim().length >= 2);
+    if (value.trim().length < 2) setSuggestions([]);
     onSearch?.(value);
   };
 
@@ -157,6 +150,11 @@ export const SearchBar = ({
     onCloseOverlay?.();
 
     navigate(`/search?q=${encodeURIComponent(cleanValue)}`);
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    handleSearch();
   };
 
   const handleSuggestionClick = (product) => {
@@ -176,26 +174,28 @@ export const SearchBar = ({
     localStorage.removeItem('recentSearches');
   };
 
+  const shouldShowDropdown =
+    isOpen &&
+    (query.trim().length >= 2 || (query.trim().length === 0 && recent.length > 0));
+
   return (
-    <div className="search-bar-wrapper" ref={searchRef}>
-      <div className="search-bar-container">
+    <search className="search-bar-wrapper" ref={searchRef} aria-label="Search products">
+      <form className="search-bar-container" onSubmit={handleSubmit}>
         <div className="search-input-wrapper">
           <span className="search-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
+            <MagnifyingGlass size={20} weight="regular" aria-hidden="true" />
           </span>
 
           <input
             ref={inputRef}
-            type="text"
+            type="search"
             className="search-input-field"
             placeholder={placeholder}
             value={query}
             onChange={handleInputChange}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             onFocus={() => setIsOpen(true)}
+            aria-label="Search products"
+            autoComplete="off"
           />
 
           {query && (
@@ -205,24 +205,26 @@ export const SearchBar = ({
               onClick={() => {
                 setQuery('');
                 setSuggestions([]);
+                setIsLoading(false);
               }}
-              aria-label="Clear"
+              aria-label="Clear search"
             >
-              ✕
+              <X size={16} weight="regular" aria-hidden="true" />
             </button>
           )}
 
           <button
-            type="button"
+            type="submit"
             className="search-submit-btn"
-            onClick={() => handleSearch()}
+            aria-label="Search"
           >
-            Search
+            <MagnifyingGlass size={18} weight="regular" aria-hidden="true" />
+            <span>Search</span>
           </button>
         </div>
 
-        {isOpen && (
-          <div className="search-dropdown">
+        {shouldShowDropdown && (
+          <div className="search-dropdown" role="region" aria-label="Search suggestions">
             {query.trim().length >= 2 ? (
               isLoading ? (
                 <div className="search-loading">
@@ -251,7 +253,7 @@ export const SearchBar = ({
                             {item.category && <span className="suggestion-category">{item.category}</span>}
                           </div>
                           <div className="suggestion-price">
-                            ${Number(item.price || 0).toFixed(2)}
+                            {formatMoney(item.price)}
                           </div>
                         </div>
                       </button>
@@ -266,7 +268,6 @@ export const SearchBar = ({
                 </>
               ) : (
                 <div className="no-results">
-                  <span>🔍</span>
                   <p>No matching products found for "{query}"</p>
                   <button type="button" onClick={() => handleSearch()}>
                     Search anyway
@@ -305,7 +306,7 @@ export const SearchBar = ({
             )}
           </div>
         )}
-      </div>
-    </div>
+      </form>
+    </search>
   );
 };

@@ -1,5 +1,7 @@
 // src/components/common/RatingStars.jsx
 import React, { useState } from 'react';
+import { Star } from '@phosphor-icons/react/dist/csr/Star';
+import { StarHalf } from '@phosphor-icons/react/dist/csr/StarHalf';
 
 export const RatingStars = ({ 
   rating = 0, 
@@ -31,25 +33,12 @@ export const RatingStars = ({
 
   const StarIcon = ({ type }) => {
     if (type === 'full') {
-      return (
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-        </svg>
-      );
+      return <Star size={config.star} weight="fill" aria-hidden="true" />;
     }
     if (type === 'half') {
-      return (
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2v15.27z"/>
-          <path d="M12 2v15.27L5.82 21l1.64-7.03L2 9.24l7.19-.61L12 2z" fillOpacity="0.3"/>
-        </svg>
-      );
+      return <StarHalf size={config.star} weight="fill" aria-hidden="true" />;
     }
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-      </svg>
-    );
+    return <Star size={config.star} weight="regular" aria-hidden="true" />;
   };
 
   const sizeConfig = {

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { ArrowUp } from '@phosphor-icons/react/dist/csr/ArrowUp';
 import { Header } from './Header';
 import { Footer } from './Footer';
 
@@ -30,9 +31,7 @@ export const Layout = ({ children, products = [] }) => {  // accept products pro
         onClick={scrollToTop}
         aria-label="Scroll to top"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 19V5M5 12l7-7 7 7"/>
-        </svg>
+        <ArrowUp size={20} weight="regular" aria-hidden="true" />
       </button>
     </div>
   );
