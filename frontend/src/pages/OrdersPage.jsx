@@ -232,7 +232,7 @@ export default function OrdersPage() {
                           <p>Qty: {item.quantity}</p>
                         </div>
                         <div className="preview-price">
-                          ${(item.price * item.quantity).toFixed(2)}
+                          PKR {(item.price * item.quantity).toFixed(2)}
                         </div>
                       </div>
                     ))}
@@ -254,7 +254,7 @@ export default function OrdersPage() {
                       <div className="summary-row">
                         <span>Order total</span>
                         <strong className="total-price">
-                          ${parseFloat(order.total).toFixed(2)}  
+                          PKR {parseFloat(order.total).toFixed(2)}  
                         </strong>
                       </div>
                     </div>

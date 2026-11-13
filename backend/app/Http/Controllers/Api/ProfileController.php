@@ -142,7 +142,7 @@ class ProfileController extends Controller
         // If this is the first address, make it default
         $isFirstAddress = $request->user()->addresses()->count() === 0;
         
-        if ($validated['is_default'] || $isFirstAddress) {
+        if (($validated['is_default'] ?? false) || $isFirstAddress) {
             // Remove default from all other addresses
             $request->user()->addresses()->update(['is_default' => false]);
             $validated['is_default'] = true;

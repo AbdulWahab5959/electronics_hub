@@ -6,6 +6,8 @@ export const getOrders = () => api.get('/orders');
 
 // Get single order by ID
 export const getOrder = (orderId) => api.get(`/orders/${orderId}`);
+export const getOrderByNumber = (number, config = {}) => api.get(`/orders/number/${encodeURIComponent(number)}`, config);
+export const getCheckoutQuote = () => api.post('/checkout/quote');
 
 // Create a new order (checkout)
 export const createOrder = (orderData) => api.post('/orders', orderData);

@@ -7,7 +7,7 @@ export const getProducts = (params = {}) => {
 };
 
 // Get single product by ID
-export const getProduct = (id) => api.get(`/products/${id}`);
+export const getProduct = (id, config = {}) => api.get(`/products/${id}`, config);
 
 // Get product categories with counts
 export const getCategories = () => api.get('/categories');

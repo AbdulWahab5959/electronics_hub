@@ -86,16 +86,16 @@ class ProductController extends Controller
                 $query->orderBy('created_at', 'desc');
         }
         
-        $perPage = $request->get('per_page', 12);
+        $perPage = max(1, min(100, (int) $request->get('per_page', 12)));
         $products = $query->paginate($perPage);
         
         // Add calculated fields to each product
         $products->getCollection()->transform(function($product) {
             $product->in_stock = $product->stock > 0;
             $product->is_on_sale = $product->discount > 0;
-            $product->formatted_price = '$' . number_format($product->price, 2);
+            $product->formatted_price = 'PKR ' . number_format($product->price, 2);
             if ($product->original_price) {
-                $product->formatted_original_price = '$' . number_format($product->original_price, 2);
+                $product->formatted_original_price = 'PKR ' . number_format($product->original_price, 2);
             }
             return $product;
         });
@@ -117,7 +117,7 @@ class ProductController extends Controller
         // Add calculated fields
         $product->in_stock = $product->stock > 0;
         $product->is_on_sale = $product->discount > 0;
-        $product->formatted_price = '$' . number_format($product->price, 2);
+        $product->formatted_price = 'PKR ' . number_format($product->price, 2);
         
         // Get related products (same category)
         $relatedProducts = Product::where('category', $product->category)
@@ -125,7 +125,7 @@ class ProductController extends Controller
             ->limit(4)
             ->get()
             ->map(function($related) {
-                $related->formatted_price = '$' . number_format($related->price, 2);
+                $related->formatted_price = 'PKR ' . number_format($related->price, 2);
                 return $related;
             });
         
@@ -184,7 +184,7 @@ class ProductController extends Controller
             ->limit(8)
             ->get()
             ->map(function($product) {
-                $product->formatted_price = '$' . number_format($product->price, 2);
+                $product->formatted_price = 'PKR ' . number_format($product->price, 2);
                 return $product;
             });
         
@@ -192,6 +192,23 @@ class ProductController extends Controller
             'success' => true,
             'data' => $products
         ]);
+    }
+
+    public function newArrivals()
+    {
+        return response()->json(['success' => true, 'data' => Product::latest()->orderByDesc('id')->limit(8)->get()]);
+    }
+
+    public function bestSelling()
+    {
+        $sales = \App\Models\OrderItem::select('product_id')
+            ->selectRaw('SUM(quantity) as units_sold')
+            ->whereHas('order', fn ($q) => $q->where('status', 'delivered'))
+            ->groupBy('product_id');
+        $products = Product::query()->joinSub($sales, 'sales', 'products.id', '=', 'sales.product_id')
+            ->select('products.*')->orderByDesc('sales.units_sold')->orderBy('products.id')->limit(8)->get();
+
+        return response()->json(['success' => true, 'data' => $products]);
     }
         
     /**
@@ -211,7 +228,7 @@ class ProductController extends Controller
             ->paginate(20);
         
         $products->getCollection()->transform(function($product) {
-            $product->formatted_price = '$' . number_format($product->price, 2);
+            $product->formatted_price = 'PKR ' . number_format($product->price, 2);
             return $product;
         });
         

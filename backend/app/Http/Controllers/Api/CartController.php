@@ -3,160 +3,76 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Cart;
-use App\Models\Product;
+use App\Models\{Cart, Product, User};
+use App\Services\CheckoutService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
 {
-    /**
-     * Display user's shopping cart
-     * 
-     * GET /api/cart
-     * 
-     * Returns all items in the authenticated user's cart
-     * Also calculates total price and item count
-     */
     public function index(Request $request)
     {
-        // Get all cart items for the logged-in user
-        // Load the related product data
-        $cart = $request->user()->cart()->with('product')->get();
-        
-        // Calculate total price of all items
-        $total = $cart->sum(function($item) {
-            return $item->price * $item->quantity;
-        });
-        
-        // Calculate total number of items
-        $count = $cart->sum('quantity');
-        
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'items' => $cart,
-                'total' => $total,
-                'count' => $count,
-            ]
-        ]);
+        $items = $request->user()->cart()->with('product')->get();
+        $total = 0;
+        foreach ($items as $item) {
+            if ($item->product) {
+                $item->name = $item->product->name;
+                $item->price = $item->product->price;
+                $item->image = $item->product->image;
+            }
+            $item->setAttribute('stock', $item->product?->stock ?? 0);
+            $total += CheckoutService::minor((string) $item->price) * $item->quantity;
+        }
+        return response()->json(['success' => true, 'data' => [
+            'items' => $items, 'total' => CheckoutService::decimal($total), 'count' => $items->sum('quantity'),
+        ]]);
     }
 
-    /**
-     * Add product to cart
-     * 
-     * POST /api/cart
-     * 
-     * Request body: { "product_id": 1, "quantity": 2 }
-     * 
-     * If product already exists in cart, increases quantity
-     * Otherwise, creates new cart item
-     */
     public function add(Request $request)
     {
-        // Validate incoming request
-        $validated = $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1',
-        ]);
-
-        // Find the product
-        $product = Product::findOrFail($validated['product_id']);
-        
-        // Check if product is already in user's cart
-        $existingItem = Cart::where('user_id', $request->user()->id)
-            ->where('product_id', $validated['product_id'])
-            ->first();
-
-        if ($existingItem) {
-            // Product exists - update quantity
-            $existingItem->quantity += $validated['quantity'];
-            $existingItem->save();
-            $cartItem = $existingItem;
-        } else {
-            // Product not in cart - create new entry
-            $cartItem = Cart::create([
-                'user_id' => $request->user()->id,
-                'product_id' => $product->id,
-                'name' => $product->name,
-                'price' => $product->price,
-                'quantity' => $validated['quantity'],
-                'image' => $product->image,
-            ]);
-        }
-
-        // Reload with product relationship
-        $cartItem->load('product');
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Item added to cart',
-            'data' => $cartItem
-        ], 201);
+        $data = $request->validate(['product_id' => 'required|integer|exists:products,id', 'quantity' => 'required|integer|min:1|max:99']);
+        $item = DB::transaction(function () use ($request, $data) {
+            User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            $product = Product::whereKey($data['product_id'])->lockForUpdate()->firstOrFail();
+            $item = $request->user()->cart()->where('product_id', $product->id)->first();
+            $quantity = ($item?->quantity ?? 0) + $data['quantity'];
+            abort_if($quantity > $product->stock || $quantity > 99, 409, 'Requested quantity is not available.');
+            $item ??= new Cart(['user_id' => $request->user()->id, 'product_id' => $product->id]);
+            $item->fill(['name' => $product->name, 'price' => $product->price, 'image' => $product->image, 'quantity' => $quantity])->save();
+            return $item;
+        }, 3);
+        return response()->json(['success' => true, 'data' => $item->load('product')], 201);
     }
 
-    /**
-     * Update cart item quantity
-     * 
-     * PUT /api/cart/{id}
-     * 
-     * Request body: { "quantity": 5 }
-     */
     public function update(Request $request, $id)
     {
-        // Validate quantity
-        $validated = $request->validate([
-            'quantity' => 'required|integer|min:1',
-        ]);
-
-        // Find cart item belonging to authenticated user
-        $cartItem = Cart::where('user_id', $request->user()->id)
-            ->where('id', $id)
-            ->firstOrFail();
-
-        // Update quantity
-        $cartItem->quantity = $validated['quantity'];
-        $cartItem->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Cart updated',
-            'data' => $cartItem
-        ]);
+        $data = $request->validate(['quantity' => 'required|integer|min:1|max:99']);
+        $item = DB::transaction(function () use ($request, $id, $data) {
+            User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            $item = $request->user()->cart()->findOrFail($id);
+            $product = Product::whereKey($item->product_id)->lockForUpdate()->firstOrFail();
+            abort_if($data['quantity'] > $product->stock, 409, 'Requested quantity is not available.');
+            $item->update(['quantity' => $data['quantity'], 'price' => $product->price]);
+            return $item;
+        }, 3);
+        return response()->json(['success' => true, 'data' => $item->load('product')]);
     }
 
-    /**
-     * Remove single item from cart
-     * 
-     * DELETE /api/cart/{id}
-     */
     public function remove(Request $request, $id)
     {
-        // Find and delete cart item
-        $cartItem = Cart::where('user_id', $request->user()->id)
-            ->where('id', $id)
-            ->firstOrFail();
-
-        $cartItem->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Item removed from cart'
-        ]);
+        DB::transaction(function () use ($request, $id) {
+            User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            $request->user()->cart()->findOrFail($id)->delete();
+        });
+        return response()->json(['success' => true, 'message' => 'Item removed']);
     }
 
-    /**
-     * Clear entire cart (remove all items)
-     * 
-     * DELETE /api/cart
-     */
     public function clear(Request $request)
     {
-        // Delete all cart items for this user
-        Cart::where('user_id', $request->user()->id)->delete();
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Cart cleared'
-        ]);
+        DB::transaction(function () use ($request) {
+            User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            $request->user()->cart()->delete();
+        });
+        return response()->json(['success' => true, 'message' => 'Cart cleared']);
     }
 }

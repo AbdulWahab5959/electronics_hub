@@ -21,6 +21,11 @@ class Order extends Model
         'shipping_cost',
         'tax',
         'status',
+        'currency',
+        'payment_status',
+        'idempotency_key',
+        'request_hash',
+        'quote_id',
     ];
 
     /**
@@ -37,6 +42,7 @@ class Order extends Model
      * The accessors to append to the model's array form.
      */
     protected $appends = ['subtotal'];
+    protected $hidden = ['idempotency_key', 'request_hash', 'quote_id'];
 
     // ============================================
     // RELATIONSHIPS
@@ -68,9 +74,8 @@ class Order extends Model
      */
     public function getSubtotalAttribute()
     {
-        return $this->items->sum(function ($item) {
-            return $item->price * $item->quantity;
-        });
+        $minor = $this->items->sum(fn ($item) => \App\Services\CheckoutService::minor((string) $item->price) * $item->quantity);
+        return \App\Services\CheckoutService::decimal($minor);
     }
 
     /**
@@ -79,7 +84,7 @@ class Order extends Model
      */
     public function getFormattedTotalAttribute()
     {
-        return '$' . number_format($this->total, 2);
+        return 'PKR ' . number_format($this->total, 2);
     }
 
     /**
@@ -88,7 +93,7 @@ class Order extends Model
      */
     public function getFormattedSubtotalAttribute()
     {
-        return '$' . number_format($this->subtotal, 2);
+        return 'PKR ' . number_format($this->subtotal, 2);
     }
 
     // ============================================

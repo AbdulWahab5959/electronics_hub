@@ -225,7 +225,11 @@ const loadProfile = async () => {
   };
 
   const handleLogout = async () => {
-    await logout();
+    const result = await logout();
+    if (!result.success) {
+      showToast(result.error, 'error');
+      return;
+    }
     window.location.href = '/login';
   };
 

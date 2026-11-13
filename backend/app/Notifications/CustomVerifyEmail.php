@@ -48,6 +48,6 @@ class CustomVerifyEmail extends VerifyEmail  // Remove "implements ShouldQueue"
             ->action('Verify Email', $verificationUrl)
             ->line('This verification link will expire in 60 minutes.')
             ->line('If you did not create an account, no further action is required.')
-            ->salutation('Best regards,<br>**TechHub Team**');
+            ->salutation('Best regards, Electronics Hub Team');
     }
 }

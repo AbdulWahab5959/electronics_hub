@@ -3,182 +3,107 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Cart;
-use App\Models\Order;
-use App\Models\OrderItem;
+use App\Models\{Cart, Order, Product, User};
+use App\Services\CheckoutService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class OrderController extends Controller
 {
-    /**
-     * Get user's orders
-     * GET /api/orders
-     */
     public function index(Request $request)
     {
-        $orders = $request->user()
-            ->orders()
-            ->with(['items.product', 'user'])  // load product images & user details
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        // Append computed subtotal for each order
-        $orders->each(function ($order) {
-            $order->append('subtotal');
-        });
-
-        return response()->json([
-            'success' => true,
-            'data' => $orders
-        ]);
+        return response()->json(['success' => true, 'data' => $request->user()->orders()->with('items.product')->latest()->get()]);
     }
 
-    /**
-     * Get single order details by ID
-     * GET /api/orders/{id}
-     */
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $order = Order::with(['items.product', 'user'])
-            ->findOrFail($id);
-
-        // Ensure user owns this order
-        if ($order->user_id !== auth()->id()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized'
-            ], 403);
-        }
-
-        $order->append('subtotal');
-
-        return response()->json([
-            'success' => true,
-            'data' => $order
-        ]);
+        $order = $request->user()->orders()->with('items.product')->findOrFail($id);
+        return response()->json(['success' => true, 'data' => $order]);
     }
 
-    /**
-     * Get single order details by order number (human-readable)
-     * GET /api/orders/number/{orderNumber}
-     */
-    public function showByNumber($orderNumber)
+    public function showByNumber(Request $request, $orderNumber)
     {
-        $order = Order::where('order_number', $orderNumber)
-            ->with(['items.product', 'user'])
-            ->firstOrFail();
-
-        // Ensure user owns this order
-        if ($order->user_id !== auth()->id()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized'
-            ], 403);
-        }
-
-        $order->append('subtotal');
-
-        return response()->json([
-            'success' => true,
-            'data' => $order
-        ]);
+        $order = $request->user()->orders()->with('items.product')->where('order_number', $orderNumber)->firstOrFail();
+        return response()->json(['success' => true, 'data' => $order]);
     }
 
-    /**
-     * Create a new order (checkout)
-     * POST /api/orders
-     */
-    public function store(Request $request)
+    public function quote(Request $request, CheckoutService $checkout)
     {
-        $validated = $request->validate([
-            'shipping_address' => 'required|array',
-            'payment_method'   => 'required|string',
-            'shipping_cost'    => 'numeric|min:0',
-            'tax'              => 'numeric|min:0',
-            'items'            => 'required|array|min:1',
-            'items.*.product_id' => 'nullable|exists:products,id',
-            'items.*.name'     => 'required|string',
-            'items.*.price'    => 'required|numeric|min:0',
-            'items.*.quantity' => 'required|integer|min:1',
+        return response()->json(['success' => true, 'data' => $checkout->quote($request->user())]);
+    }
+
+    public function store(Request $request, CheckoutService $checkout)
+    {
+        $data = $request->validate([
+            'idempotency_key' => 'required|uuid',
+            'quote_token' => 'required|string|max:10000',
+            'payment_method' => 'required|in:cod',
+            'shipping_address' => 'required|array:fullName,email,phone,address,apartment,city,state,zipCode,country',
+            'shipping_address.fullName' => 'required|string|max:255',
+            'shipping_address.email' => 'required|email|max:255',
+            'shipping_address.phone' => 'required|string|max:30',
+            'shipping_address.address' => 'required|string|max:500',
+            'shipping_address.apartment' => 'nullable|string|max:100',
+            'shipping_address.city' => 'required|string|max:100',
+            'shipping_address.state' => 'required|string|max:100',
+            'shipping_address.zipCode' => 'nullable|string|max:20',
+            'shipping_address.country' => 'required|in:PK',
+            'items' => 'prohibited', 'tax' => 'prohibited',
+            'shipping_cost' => 'prohibited', 'total' => 'prohibited', 'discount' => 'prohibited',
         ]);
-
-        // Calculate totals
-        $subtotal = collect($validated['items'])->sum(fn($item) => $item['price'] * $item['quantity']);
-        $shippingCost = $validated['shipping_cost'] ?? 0;
-        $tax = $validated['tax'] ?? 0;
-        $total = $subtotal + $shippingCost + $tax;
-
-        // Create order
-        $order = Order::create([
-            'user_id'          => $request->user()->id,
-            'order_number'     => 'ORD-' . strtoupper(uniqid()),
-            'total'            => $total,
-            'shipping_address' => $validated['shipping_address'],
-            'payment_method'   => $validated['payment_method'],
-            'shipping_cost'    => $shippingCost,
-            'tax'              => $tax,
-            'status'           => 'pending',
-        ]);
-
-        // Create order items
-        foreach ($validated['items'] as $item) {
-            OrderItem::create([
-                'order_id'   => $order->id,
-                'product_id' => $item['product_id'] ?? null,
-                'name'       => $item['name'],
-                'price'      => $item['price'],
-                'quantity'   => $item['quantity'],
+        $hash = $checkout->requestHash($data);
+        $created = false;
+        $order = DB::transaction(function () use ($request, $data, $checkout, $hash, &$created) {
+            // One lock order for checkout, cancellation and cart mutations: user, then products.
+            User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            $existing = $request->user()->orders()->where('idempotency_key', $data['idempotency_key'])->first();
+            if ($existing) {
+                abort_unless(hash_equals($existing->request_hash, $hash), 409, 'This request key was already used for a different order.');
+                return $existing->load('items.product');
+            }
+            $claim = $checkout->claim($data['quote_token'], $request->user());
+            abort_if(Order::where('quote_id', $claim['id'])->exists(), 409, 'This quote was already used. Review your cart again.');
+            $snapshot = $checkout->snapshot($request->user(), true);
+            abort_unless(hash_equals($claim['fingerprint'], $checkout->fingerprint($snapshot)), 409, 'Your cart or prices changed. Review your order again.');
+            $order = $request->user()->orders()->create([
+                'order_number' => 'ORD-'.Str::upper((string) Str::ulid()),
+                'total' => $snapshot['total'], 'currency' => $snapshot['currency'],
+                'shipping_cost' => $snapshot['shipping_cost'], 'tax' => $snapshot['tax'],
+                'shipping_address' => $data['shipping_address'], 'payment_method' => 'cod',
+                'status' => 'pending', 'payment_status' => 'awaiting_collection',
+                'idempotency_key' => $data['idempotency_key'], 'request_hash' => $hash, 'quote_id' => $claim['id'],
             ]);
-        }
-
-        // (Optional) Clear backend cart if you later decide to use it
-        // Cart::where('user_id', $request->user()->id)->delete();
-
-        $order->load(['items.product', 'user']);
-        $order->append('subtotal');
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Order placed successfully',
-            'data'    => $order
-        ], 201);
+            foreach ($snapshot['items'] as $item) {
+                $order->items()->create(collect($item)->only(['product_id', 'name', 'price', 'quantity'])->all());
+                Product::whereKey($item['product_id'])->decrement('stock', $item['quantity']);
+            }
+            Cart::where('user_id', $request->user()->id)->delete();
+            $created = true;
+            return $order->load('items.product');
+        }, 3);
+        return response()->json(['success' => true, 'data' => $order], $created ? 201 : 200);
     }
 
-    /**
-     * Cancel a pending order
-     * POST /api/orders/{id}/cancel
-     */
     public function cancel(Request $request, $id)
     {
-        $order = Order::where('user_id', $request->user()->id)
-            ->where('status', 'pending')
-            ->findOrFail($id);
-
-        $order->status = 'cancelled';
-        $order->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Order cancelled successfully',
-            'data' => $order
-        ]);
+        $order = DB::transaction(function () use ($request, $id) {
+            User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            $order = $request->user()->orders()->lockForUpdate()->findOrFail($id);
+            if ($order->status === 'cancelled') return $order;
+            abort_unless($order->status === 'pending' && $order->payment_status === 'awaiting_collection', 409, 'This order can no longer be cancelled here.');
+            foreach ($order->items()->orderBy('product_id')->get() as $item) {
+                if ($item->product_id) Product::whereKey($item->product_id)->increment('stock', $item->quantity);
+            }
+            $order->update(['status' => 'cancelled', 'payment_status' => 'cancelled']);
+            return $order;
+        }, 3);
+        return response()->json(['success' => true, 'data' => $order, 'message' => 'Order cancelled']);
     }
 
-    /**
-     * Track order by order number (public, no login required)
-     * GET /api/orders/track/{orderNumber}
-     */
-    public function track($orderNumber)
+    public function track(Request $request, $orderNumber)
     {
-        $order = Order::where('order_number', $orderNumber)
-            ->with(['items.product', 'user'])
-            ->firstOrFail();
-
-        $order->append('subtotal');
-
-        return response()->json([
-            'success' => true,
-            'data' => $order
-        ]);
+        $order = $request->user()->orders()->where('order_number', $orderNumber)->firstOrFail();
+        return response()->json(['success' => true, 'data' => $order->only(['order_number', 'status', 'created_at', 'updated_at'])]);
     }
 }

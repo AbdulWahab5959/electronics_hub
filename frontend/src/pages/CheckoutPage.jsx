@@ -1,674 +1,159 @@
-// src/pages/CheckoutPage.jsx
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useCart } from '../hooks/useCart';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useToast } from '../components/common/ToastNotification';
-import { Breadcrumb } from '../components/common/Breadcrumb';
+import { useCart } from '../hooks/useCart';
+import { getAddresses } from '../services/user';
+import { createOrder, getCheckoutQuote } from '../services/order';
 import { OrderSummary } from '../components/common/OrderSummary';
-import { getProfile, getAddresses } from '../services/user';
-import { createOrder } from '../services/order'; // Import API function
+import { formatMoney } from '../utils/money';
+
+const fields = [
+  ['fullName', 'Full name', 'text', 'name', true],
+  ['email', 'Email', 'email', 'email', true],
+  ['phone', 'Phone', 'tel', 'tel', true],
+  ['address', 'Street address', 'text', 'address-line1', true],
+  ['apartment', 'Apartment / landmark', 'text', 'address-line2', false],
+  ['city', 'City', 'text', 'address-level2', true],
+  ['state', 'Province / region', 'text', 'address-level1', true],
+  ['zipCode', 'Postal code (optional)', 'text', 'postal-code', false],
+];
 
 export default function CheckoutPage() {
+  const { user } = useAuth();
+  const { cartItems, isLoading: cartLoading, error: cartError, fetchCart } = useCart();
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
-  const { cartItems, cartTotal, clearCart } = useCart();
-  const showToast = useToast();
-
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [loadingProfile, setLoadingProfile] = useState(true);
-
-  // Form state - Shipping Info (single full name)
-  const [shippingInfo, setShippingInfo] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    address: '',
-    apartment: '',
-    city: '',
-    state: '',
-    zipCode: '',
-    country: 'PK',
+  const [shipping, setShipping] = useState({
+    fullName: user?.name || '', email: user?.email || '', phone: user?.phone || '',
+    address: '', apartment: '', city: '', state: '', zipCode: '', country: 'PK',
   });
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [step, setStep] = useState(1);
+  const [quote, setQuote] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState('');
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const request = useRef(null);
+  const submitting = useRef(false);
 
-  // Payment info
-  const [paymentInfo, setPaymentInfo] = useState({
-    method: 'card',
-    cardName: '',
-    cardNumber: '',
-    cardExpiry: '',
-    cardCvv: '',
-    saveCard: false,
-  });
-
-  // Billing info
-  const [sameAsShipping, setSameAsShipping] = useState(true);
-  const [billingInfo, setBillingInfo] = useState({ ...shippingInfo });
-
-  // Form errors
-  const [errors, setErrors] = useState({});
-
-  // Load user profile and default address on mount
   useEffect(() => {
-    if (!isAuthenticated) {
-      showToast('Please login to continue checkout', 'warning');
-      navigate('/login');
-      return;
-    }
-    if (cartItems.length === 0) {
-      showToast('Your cart is empty', 'warning');
-      navigate('/cart');
-      return;
-    }
-    loadUserData();
-  }, [isAuthenticated, cartItems, navigate]);
-
-  const loadUserData = async () => {
-    setLoadingProfile(true);
-    try {
-      // 1. Fetch full profile (includes phone, name)
-      const profileRes = await getProfile();
-      const userData = profileRes.data.data.user;
-
-      // 2. Fetch addresses and find default
-      const addressesRes = await getAddresses();
-      const addresses = addressesRes.data.data;
-      const defaultAddress = addresses.find(addr => addr.is_default) || addresses[0];
-
-      setShippingInfo(prev => ({
-        ...prev,
-        fullName: userData.name || '',
-        email: userData.email || '',
-        phone: userData.phone || '',
-        address: defaultAddress?.address || '',
-        city: defaultAddress?.city || '',
-        state: defaultAddress?.state || '',
-        zipCode: defaultAddress?.zip_code || '',
-        country: defaultAddress?.country || 'PK',
-        // apartment is not in DB schema, kept separate for user input
+    const controller = new AbortController();
+    getAddresses({ signal: controller.signal }).then(response => {
+      const addresses = response.data.data;
+      const address = addresses.find(item => item.is_default) || addresses[0];
+      if (address && !controller.signal.aborted) setShipping(previous => ({
+        ...previous, address: address.address, city: address.city, state: address.state,
+        zipCode: address.zip_code || '', country: 'PK',
       }));
-    } catch (error) {
-      console.error('Failed to load profile/addresses', error);
-      // Fallback: use auth user data if available
-      if (user) {
-        setShippingInfo(prev => ({
-          ...prev,
-          fullName: user.name || '',
-          email: user.email || '',
-        }));
-      }
-    } finally {
-      setLoadingProfile(false);
-    }
-  };
+    }).catch(() => {
+      // A saved address is optional; the customer can enter one below.
+    }).finally(() => {
+      if (!controller.signal.aborted) setProfileLoaded(true);
+    });
+    return () => controller.abort();
+  }, []);
 
-  // Calculate totals
-  const subtotal = cartTotal;
-  const shipping = subtotal > 100 ? 0 : 10;
-  const tax = subtotal * 0.08;
-  const total = subtotal + shipping + tax;
-
-  const handleShippingChange = (e) => {
-    setShippingInfo({ ...shippingInfo, [e.target.name]: e.target.value });
-    if (errors[e.target.name]) {
-      setErrors({ ...errors, [e.target.name]: '' });
-    }
-  };
-
-  const handlePaymentChange = (e) => {
-    setPaymentInfo({ ...paymentInfo, [e.target.name]: e.target.value });
-    if (errors[e.target.name]) {
-      setErrors({ ...errors, [e.target.name]: '' });
-    }
-  };
-
-  // Validate Step 1 – Shipping
-  const validateStep1 = () => {
-    const newErrors = {};
-    if (!shippingInfo.fullName) newErrors.fullName = 'Full name required';
-    if (!shippingInfo.email) newErrors.email = 'Email required';
-    if (!shippingInfo.phone) newErrors.phone = 'Phone required';
-    if (!shippingInfo.address) newErrors.address = 'Address required';
-    if (!shippingInfo.city) newErrors.city = 'City required';
-    if (!shippingInfo.state) newErrors.state = 'State/Province required';
-    if (!shippingInfo.zipCode) newErrors.zipCode = 'ZIP code required';
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // Validate Step 2 – Payment (only card)
-  const validateStep2 = () => {
-    if (paymentInfo.method === 'card') {
-      const newErrors = {};
-      if (!paymentInfo.cardName) newErrors.cardName = 'Name on card required';
-      if (!paymentInfo.cardNumber) newErrors.cardNumber = 'Card number required';
-      if (!paymentInfo.cardExpiry) newErrors.cardExpiry = 'Expiry date required';
-      if (!paymentInfo.cardCvv) newErrors.cardCvv = 'CVV required';
-      setErrors(newErrors);
-      return Object.keys(newErrors).length === 0;
-    }
-    return true;
-  };
-
-  const handleNext = () => {
-    if (currentStep === 1 && validateStep1()) {
-      setCurrentStep(2);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (currentStep === 2 && validateStep2()) {
-      setCurrentStep(3);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  const handleBack = () => {
-    setCurrentStep(currentStep - 1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handlePlaceOrder = async () => {
-    setIsProcessing(true);
-
+  const review = async event => {
+    event.preventDefault();
+    if (processing) return;
+    setError('');
+    if (step === 2) { setStep(3); return; }
+    setProcessing(true);
     try {
-      // Prepare payload for backend API
-      const payload = {
-        shipping_address: {
-          fullName: shippingInfo.fullName,
-          address: shippingInfo.address,
-          apartment: shippingInfo.apartment || '',
-          city: shippingInfo.city,
-          state: shippingInfo.state,
-          zipCode: shippingInfo.zipCode,
-          country: shippingInfo.country,
-          phone: shippingInfo.phone,
-          email: shippingInfo.email,
-        },
-        payment_method: paymentInfo.method,
-        shipping_cost: shipping,
-        tax: tax,
-        items: cartItems.map(item => ({
-          product_id: item.id,          // assuming cart item has `id` = product_id
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-        })),
-      };
+      const response = await getCheckoutQuote();
+      setQuote(response.data.data);
+      setStep(2);
+    } catch (failure) {
+      setError(failure.response?.data?.message || 'Could not confirm your cart. Please retry.');
+    } finally { setProcessing(false); }
+  };
 
-      const response = await createOrder(payload);
-      const createdOrder = response.data.data; // backend returns { success, message, data }
-
-      // Clear cart after successful order
-      clearCart();
-
-      showToast('Order placed successfully!', 'success');
-      navigate('/order-success', { state: { order: createdOrder } });
-    } catch (error) {
-      console.error('Order placement failed:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to place order. Please try again.';
-      showToast(errorMessage, 'error');
+  const placeOrder = async event => {
+    event.preventDefault();
+    if (submitting.current) return;
+    if (!quote && !request.current) return;
+    submitting.current = true;
+    setProcessing(true);
+    setError('');
+    request.current ??= {
+      idempotency_key: crypto.randomUUID(),
+      quote_token: quote.quote_token,
+      shipping_address: { ...shipping },
+      payment_method: 'cod',
+    };
+    setHasPendingRequest(true);
+    try {
+      const response = await createOrder(request.current);
+      const order = response.data.data;
+      // The backend cleared exactly the committed cart in its transaction.
+      await fetchCart();
+      navigate('/order-success?order=' + encodeURIComponent(order.order_number), { state: { order }, replace: true });
+    } catch (failure) {
+      const status = failure.response?.status;
+      const fields = Object.values(failure.response?.data?.errors || {}).flat();
+      setError(fields[0] || failure.response?.data?.message || 'The result is uncertain. Retry this same request or check My Orders before placing another order.');
+      if ([400, 401, 403, 409, 422, 503].includes(status)) {
+        request.current = null;
+        setHasPendingRequest(false);
+        setQuote(null);
+        setStep(1);
+        void fetchCart();
+      }
+      // Network/500 errors preserve the exact request/key for safe retries.
     } finally {
-      setIsProcessing(false);
+      submitting.current = false;
+      setProcessing(false);
     }
   };
 
-  const formatCardNumber = (value) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = (matches && matches[0]) || '';
-    const parts = [];
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-    return parts.length ? parts.join(' ') : value;
-  };
+  if (cartLoading || !profileLoaded) return <div className="container" role="status">Loading checkout…</div>;
+  if (cartError && !hasPendingRequest) return <div className="container" role="alert">
+    <p>{cartError}</p><Link to="/cart">Return to cart</Link>
+  </div>;
+  if (!cartItems.length && !hasPendingRequest) return <div className="container">
+    <h1>Your cart is empty</h1><Link to="/orders">Check My Orders</Link> · <Link to="/shop">Continue shopping</Link>
+  </div>;
 
-  const formatExpiry = (value) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    if (v.length >= 2) {
-      return v.substring(0, 2) + (v.length > 2 ? '/' + v.substring(2, 4) : '');
-    }
-    return v;
-  };
-
-  const handleCardNumberChange = (e) => {
-    const formatted = formatCardNumber(e.target.value);
-    setPaymentInfo({ ...paymentInfo, cardNumber: formatted });
-  };
-
-  const handleExpiryChange = (e) => {
-    const formatted = formatExpiry(e.target.value);
-    setPaymentInfo({ ...paymentInfo, cardExpiry: formatted });
-  };
-
-  if (loadingProfile) {
-    return (
-      <div className="checkout-page">
-        <div className="container">
-          <div className="search-loading">
-            <div className="loading-spinner"></div>
-            <span>Loading your information...</span>
-          </div>
+  return <div className="checkout-page"><div className="container">
+    <h1>Checkout</h1>
+    <nav aria-label="Checkout progress"><ol className="checkout-steps">
+      {['Shipping', 'Payment', 'Review'].map((label, index) =>
+        <li key={label} aria-current={step === index + 1 ? 'step' : undefined}>{index + 1}. {label}</li>)}
+    </ol></nav>
+    {error && <div className="alert-error" role="alert">{error}</div>}
+    <div className="checkout-content">
+      <form className="checkout-card" onSubmit={step === 3 ? placeOrder : review}>
+        <fieldset disabled={processing || hasPendingRequest}>
+          <legend>{step === 1 ? 'Shipping information' : step === 2 ? 'Payment method' : 'Review your order'}</legend>
+          {step === 1 && <>
+            {fields.map(([name, label, type, autoComplete, required]) => <div className="form-group" key={name}>
+              <label htmlFor={'checkout-' + name}>{label}{required ? ' *' : ''}</label>
+              <input id={'checkout-' + name} name={name} type={type} autoComplete={'shipping ' + autoComplete}
+                required={required} maxLength={name === 'address' ? 500 : name === 'phone' ? 30 : name === 'zipCode' ? 20 : 255}
+                value={shipping[name]} onChange={event => setShipping(previous => ({ ...previous, [name]: event.target.value }))} />
+            </div>)}
+            <p>Country: Pakistan</p>
+          </>}
+          {step === 2 && <div className="payment-info-message">
+            <label><input type="radio" name="payment_method" value="cod" checked readOnly /> Cash on delivery</label>
+            <p>Pay the confirmed amount when you receive your order. Online payments are not currently available.</p>
+          </div>}
+          {step === 3 && <>
+            <h2>Deliver to</h2>
+            <p>{shipping.fullName}<br />{shipping.address}<br />{shipping.apartment}
+              <br />{shipping.city}, {shipping.state} {shipping.zipCode}<br />{shipping.phone}<br />{shipping.email}</p>
+            <h2>Payment</h2><p>Cash on delivery — payment has not been collected.</p>
+            <p>Quote expires at {new Date(quote.expires_at).toLocaleTimeString()}.</p>
+          </>}
+        </fieldset>
+        <div className="form-actions">
+          {step > 1 && <button type="button" className="btn-back" disabled={processing || hasPendingRequest} onClick={() => setStep(step - 1)}>Back</button>}
+          <button type="submit" className="btn-next" disabled={processing}>
+            {processing ? 'Please wait…' : hasPendingRequest ? 'Retry the same order request' : step === 1 ? 'Confirm availability and price' : step === 2 ? 'Review order' : 'Place COD order — ' + formatMoney(quote.total)}
+          </button>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="checkout-page">
-      <div className="container">
-        <Breadcrumb
-          items={[
-            { name: 'Home', path: '/' },
-            { name: 'Cart', path: '/cart' },
-            { name: 'Checkout', path: '/checkout' }
-          ]}
-        />
-
-        <div className="checkout-header">
-          <h1>Checkout</h1>
-          <p>Complete your order</p>
-        </div>
-
-        {/* Progress Steps */}
-        <div className="checkout-progress">
-          <div className={`progress-step ${currentStep >= 1 ? 'active' : ''}`}>
-            <div className="step-number">1</div>
-            <div className="step-label">Shipping</div>
-          </div>
-          <div className={`progress-line ${currentStep >= 2 ? 'active' : ''}`}></div>
-          <div className={`progress-step ${currentStep >= 2 ? 'active' : ''}`}>
-            <div className="step-number">2</div>
-            <div className="step-label">Payment</div>
-          </div>
-          <div className={`progress-line ${currentStep >= 3 ? 'active' : ''}`}></div>
-          <div className={`progress-step ${currentStep >= 3 ? 'active' : ''}`}>
-            <div className="step-number">3</div>
-            <div className="step-label">Confirm</div>
-          </div>
-        </div>
-
-        <div className="checkout-content">
-          {/* Form Section */}
-          <div className="checkout-form-section">
-            {/* Step 1 - Shipping Information */}
-            {currentStep === 1 && (
-              <div className="checkout-card">
-                <h2>Shipping Information</h2>
-
-                <div className="form-group">
-                  <label>Full Name *</label>
-                  <input
-                    type="text"
-                    name="fullName"
-                    value={shippingInfo.fullName}
-                    onChange={handleShippingChange}
-                    className={errors.fullName ? 'error' : ''}
-                  />
-                  {errors.fullName && <span className="error-msg">{errors.fullName}</span>}
-                </div>
-
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Email *</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={shippingInfo.email}
-                      onChange={handleShippingChange}
-                      className={errors.email ? 'error' : ''}
-                    />
-                    {errors.email && <span className="error-msg">{errors.email}</span>}
-                  </div>
-                  <div className="form-group">
-                    <label>Phone *</label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={shippingInfo.phone}
-                      onChange={handleShippingChange}
-                      className={errors.phone ? 'error' : ''}
-                    />
-                    {errors.phone && <span className="error-msg">{errors.phone}</span>}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Street Address *</label>
-                  <input
-                    type="text"
-                    name="address"
-                    value={shippingInfo.address}
-                    onChange={handleShippingChange}
-                    className={errors.address ? 'error' : ''}
-                  />
-                  {errors.address && <span className="error-msg">{errors.address}</span>}
-                </div>
-
-                <div className="form-group">
-                  <label>Apartment, Suite, etc. (Optional)</label>
-                  <input
-                    type="text"
-                    name="apartment"
-                    value={shippingInfo.apartment}
-                    onChange={handleShippingChange}
-                  />
-                </div>
-
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>City *</label>
-                    <input
-                      type="text"
-                      name="city"
-                      value={shippingInfo.city}
-                      onChange={handleShippingChange}
-                      className={errors.city ? 'error' : ''}
-                    />
-                    {errors.city && <span className="error-msg">{errors.city}</span>}
-                  </div>
-                  <div className="form-group">
-                    <label>State/Province *</label>
-                    <input
-                      type="text"
-                      name="state"
-                      value={shippingInfo.state}
-                      onChange={handleShippingChange}
-                      className={errors.state ? 'error' : ''}
-                    />
-                    {errors.state && <span className="error-msg">{errors.state}</span>}
-                  </div>
-                  <div className="form-group">
-                    <label>ZIP Code *</label>
-                    <input
-                      type="text"
-                      name="zipCode"
-                      value={shippingInfo.zipCode}
-                      onChange={handleShippingChange}
-                      className={errors.zipCode ? 'error' : ''}
-                    />
-                    {errors.zipCode && <span className="error-msg">{errors.zipCode}</span>}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Country *</label>
-                  <select name="country" value={shippingInfo.country} onChange={handleShippingChange}>
-                    <option value="PK">Pakistan</option>
-                    <option value="US">United States</option>
-                    <option value="UK">United Kingdom</option>
-                    <option value="CA">Canada</option>
-                    <option value="AU">Australia</option>
-                  </select>
-                </div>
-
-                <div className="form-actions">
-                  <button className="btn-next" onClick={handleNext}>
-                    Continue to Payment
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 2 - Payment Information */}
-            {currentStep === 2 && (
-              <div className="checkout-card">
-                <h2>Payment Method</h2>
-
-                <div className="payment-methods">
-                  <button
-                    type="button"
-                    className={`payment-tab ${paymentInfo.method === 'card' ? 'active' : ''}`}
-                    onClick={() => setPaymentInfo({ ...paymentInfo, method: 'card' })}
-                  >
-                    💳 Credit Card
-                  </button>
-                  <button
-                    type="button"
-                    className={`payment-tab ${paymentInfo.method === 'paypal' ? 'active' : ''}`}
-                    onClick={() => setPaymentInfo({ ...paymentInfo, method: 'paypal' })}
-                  >
-                    PayPal
-                  </button>
-                  <button
-                    type="button"
-                    className={`payment-tab ${paymentInfo.method === 'cod' ? 'active' : ''}`}
-                    onClick={() => setPaymentInfo({ ...paymentInfo, method: 'cod' })}
-                  >
-                    Cash on Delivery
-                  </button>
-                </div>
-
-                {paymentInfo.method === 'card' && (
-                  <div className="card-payment-form">
-                    <div className="form-group">
-                      <label>Name on Card *</label>
-                      <input
-                        type="text"
-                        name="cardName"
-                        value={paymentInfo.cardName}
-                        onChange={handlePaymentChange}
-                        className={errors.cardName ? 'error' : ''}
-                      />
-                      {errors.cardName && <span className="error-msg">{errors.cardName}</span>}
-                    </div>
-
-                    <div className="form-group">
-                      <label>Card Number *</label>
-                      <input
-                        type="text"
-                        name="cardNumber"
-                        value={paymentInfo.cardNumber}
-                        onChange={handleCardNumberChange}
-                        className={errors.cardNumber ? 'error' : ''}
-                        placeholder="1234 5678 9012 3456"
-                        maxLength="19"
-                      />
-                      {errors.cardNumber && <span className="error-msg">{errors.cardNumber}</span>}
-                    </div>
-
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>Expiry Date *</label>
-                        <input
-                          type="text"
-                          name="cardExpiry"
-                          value={paymentInfo.cardExpiry}
-                          onChange={handleExpiryChange}
-                          className={errors.cardExpiry ? 'error' : ''}
-                          placeholder="MM/YY"
-                          maxLength="5"
-                        />
-                        {errors.cardExpiry && <span className="error-msg">{errors.cardExpiry}</span>}
-                      </div>
-                      <div className="form-group">
-                        <label>CVV *</label>
-                        <input
-                          type="text"
-                          name="cardCvv"
-                          value={paymentInfo.cardCvv}
-                          onChange={handlePaymentChange}
-                          className={errors.cardCvv ? 'error' : ''}
-                          placeholder="123"
-                          maxLength="4"
-                        />
-                        {errors.cardCvv && <span className="error-msg">{errors.cardCvv}</span>}
-                      </div>
-                    </div>
-
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        name="saveCard"
-                        checked={paymentInfo.saveCard}
-                        onChange={(e) => setPaymentInfo({ ...paymentInfo, saveCard: e.target.checked })}
-                      />
-                      Save card for future purchases
-                    </label>
-                  </div>
-                )}
-
-                {paymentInfo.method === 'paypal' && (
-                  <div className="payment-info-message">
-                    <p>You will be redirected to PayPal to complete your payment.</p>
-                  </div>
-                )}
-
-                {paymentInfo.method === 'cod' && (
-                  <div className="payment-info-message">
-                    <p>Pay with cash when you receive your order.</p>
-                  </div>
-                )}
-
-                {/* Billing Address */}
-                <div className="billing-section">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={sameAsShipping}
-                      onChange={(e) => setSameAsShipping(e.target.checked)}
-                    />
-                    Billing address same as shipping
-                  </label>
-
-                  {!sameAsShipping && (
-                    <div className="billing-form">
-                      <h3>Billing Address</h3>
-                      {/* You can add billing address fields here similar to shipping */}
-                      <p className="info-text">Billing address fields would go here.</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="form-actions">
-                  <button className="btn-back" onClick={handleBack}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M19 12H5M12 19l-7-7 7-7"/>
-                    </svg>
-                    Back
-                  </button>
-                  <button className="btn-next" onClick={handleNext}>
-                    Review Order
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3 - Order Review */}
-            {currentStep === 3 && (
-              <div className="checkout-card">
-                <h2>Review Your Order</h2>
-
-                <div className="order-review">
-                  <div className="review-section">
-                    <h3>Shipping Address</h3>
-                    <p>
-                      {shippingInfo.fullName}<br />
-                      {shippingInfo.address}<br />
-                      {shippingInfo.apartment && <>{shippingInfo.apartment}<br /></>}
-                      {shippingInfo.city}, {shippingInfo.state} {shippingInfo.zipCode}<br />
-                      {shippingInfo.country}<br />
-                      Phone: {shippingInfo.phone}<br />
-                      Email: {shippingInfo.email}
-                    </p>
-                    <button className="edit-link" onClick={() => setCurrentStep(1)}>Edit</button>
-                  </div>
-
-                  <div className="review-section">
-                    <h3>Payment Method</h3>
-                    <p>
-                      {paymentInfo.method === 'card' && 'Credit Card'}
-                      {paymentInfo.method === 'paypal' && 'PayPal'}
-                      {paymentInfo.method === 'cod' && 'Cash on Delivery'}
-                    </p>
-                    {paymentInfo.method === 'card' && paymentInfo.cardNumber && (
-                      <p>Card ending in {paymentInfo.cardNumber.slice(-4)}</p>
-                    )}
-                    <button className="edit-link" onClick={() => setCurrentStep(2)}>Edit</button>
-                  </div>
-
-                  <div className="review-section">
-                    <h3>Items</h3>
-                    <div className="review-items">
-                      {cartItems.map((item, idx) => (
-                        <div key={idx} className="review-item">
-                          <div className="review-item-info">
-                            <span className="item-quantity">{item.quantity}×</span>
-                            <span className="item-name">{item.name}</span>
-                          </div>
-                          <span className="item-price">${(item.price * item.quantity).toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <button className="edit-link" onClick={() => navigate('/cart')}>Edit</button>
-                  </div>
-                </div>
-
-                <div className="order-total-review">
-                  <div className="total-row">
-                    <span>Subtotal</span>
-                    <span>${subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="total-row">
-                    <span>Shipping</span>
-                    <span>{shipping === 0 ? 'Free' : `$${shipping.toFixed(2)}`}</span>
-                  </div>
-                  <div className="total-row">
-                    <span>Tax (8%)</span>
-                    <span>${tax.toFixed(2)}</span>
-                  </div>
-                  <div className="total-row grand-total">
-                    <span>Total</span>
-                    <span>${total.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="form-actions">
-                  <button className="btn-back" onClick={handleBack}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M19 12H5M12 19l-7-7 7-7"/>
-                    </svg>
-                    Back
-                  </button>
-                  <button className="btn-place-order" onClick={handlePlaceOrder} disabled={isProcessing}>
-                    {isProcessing ? (
-                      <>
-                        <span className="btn-spinner"></span>
-                        Processing...
-                      </>
-                    ) : (
-                      `Place Order • $${total.toFixed(2)}`
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Order Summary Sidebar */}
-          <div className="checkout-summary-section">
-            <OrderSummary
-              subtotal={subtotal}
-              shipping={shipping}
-              tax={8}
-              items={cartItems.map(item => ({
-                id: item.id,
-                name: item.name,
-                price: item.price,
-                quantity: item.quantity
-              }))}
-              onCheckout={() => {}}
-              showActions={false}
-            />
-          </div>
-        </div>
-      </div>
+        <Link to="/orders">My Orders</Link> · <Link to="/cart">Return to cart</Link>
+      </form>
+      <aside><OrderSummary quote={quote} items={quote?.items || cartItems} subtotal={cartItems.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0)} /></aside>
     </div>
-  );
+  </div></div>;
 }

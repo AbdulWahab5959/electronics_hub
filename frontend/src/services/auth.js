@@ -20,7 +20,7 @@ export const logout = async () => {
   return api.post("/logout");
 };
 
-export const getUser = () => api.get("/user");
+export const getUser = (config = {}) => api.get("/user", config);
 
 // ========== PASSWORD RESET ==========
 export const forgotPassword = async (email) => {
@@ -39,5 +39,5 @@ export const verifyEmail = async (id, hash, expires, signature) => {
 };
 
 export const resendVerification = async () => {
-  return api.post("/email/resend");
+  return withCsrf(() => api.post("/email/resend"));
 };

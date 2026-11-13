@@ -1,119 +1,33 @@
-// src/components/common/CartItem.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { formatMoney } from '../../utils/money';
 
-export const CartItem = ({ 
-  id,
-  name, 
-  price, 
-  image, 
-  quantity = 1,
-  maxStock = 10,
-  onUpdateQuantity,
-  onRemove,
-  onMoveToWishlist
-}) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [itemQuantity, setItemQuantity] = useState(quantity);
-
-  const itemTotal = price * itemQuantity;
-
-  const handleQuantityChange = async (newQuantity) => {
-    if (newQuantity < 1 || newQuantity > maxStock) return;
-    
-    setItemQuantity(newQuantity);
-    setIsLoading(true);
-    await onUpdateQuantity?.(id, newQuantity);
-    setIsLoading(false);
+export function CartItem({ id, productId, name, image, price, quantity, maxStock, onUpdateQuantity, onRemove }) {
+  const [busy, setBusy] = useState(false);
+  const update = async next => {
+    setBusy(true);
+    try { await onUpdateQuantity(id, next); } finally { setBusy(false); }
   };
-
-  const handleRemove = async () => {
-    setIsLoading(true);
-    await onRemove?.(id);
-    setIsLoading(false);
+  const remove = async () => {
+    setBusy(true);
+    try { await onRemove(id); } finally { setBusy(false); }
   };
-
-  const handleMoveToWishlist = async () => {
-    setIsLoading(true);
-    await onMoveToWishlist?.(id);
-    setIsLoading(false);
-  };
-
-  return (
-    <div className={`cart-item ${isLoading ? 'cart-item-loading' : ''}`}>
-      {/* Loading Overlay */}
-      {isLoading && <div className="cart-item-loader"></div>}
-      
-      {/* Product Image */}
-      <Link to={`/product/${id}`} className="cart-item-image-link">
-        <div className="cart-item-image-wrapper">
-          <img src={image} alt={name} className="cart-item-image" />
-        </div>
-      </Link>
-
-      {/* Product Details */}
-      <div className="cart-item-details">
-        <Link to={`/product/${id}`} className="cart-item-title-link">
-          <h3 className="cart-item-title">{name}</h3>
-        </Link>
-        
-        <div className="cart-item-actions">
-          {/* Quantity Selector */}
-          <div className="quantity-selector">
-            <button 
-              className="quantity-btn quantity-decrease"
-              onClick={() => handleQuantityChange(itemQuantity - 1)}
-              disabled={itemQuantity <= 1 || isLoading}
-              aria-label="Decrease quantity"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14"/>
-              </svg>
-            </button>
-            
-            <span className="quantity-value">{itemQuantity}</span>
-            
-            <button 
-              className="quantity-btn quantity-increase"
-              onClick={() => handleQuantityChange(itemQuantity + 1)}
-              disabled={itemQuantity >= maxStock || isLoading}
-              aria-label="Increase quantity"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-            </button>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="cart-item-action-buttons">
-            
-            <button 
-              className="cart-item-action remove-item"
-              onClick={handleRemove}
-              disabled={isLoading}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                <path d="M10 11v5M14 11v5"/>
-              </svg>
-              Remove
-            </button>
-          </div>
-        </div>
+  return <div className={'cart-item' + (busy ? ' cart-item-loading' : '')}>
+    <Link to={'/product/' + productId} className="cart-item-image-link"><img className="cart-item-image" src={image} alt={name} /></Link>
+    <div className="cart-item-details">
+      <Link to={'/product/' + productId}><h3>{name}</h3></Link>
+      <div className="quantity-selector">
+        <button type="button" aria-label={'Decrease quantity of ' + name} disabled={busy || quantity <= 1}
+          onClick={() => update(Math.min(quantity - 1, Math.max(maxStock, 1)))}>−</button>
+        <span className="quantity-value">{quantity}</span>
+        <button type="button" aria-label={'Increase quantity of ' + name} disabled={busy || quantity >= maxStock}
+          onClick={() => update(quantity + 1)}>+</button>
       </div>
-
-      {/* Price & Total */}
-      <div className="cart-item-price-section">
-        <div className="cart-item-unit-price">
-          <span className="price-label">Unit Price</span>
-          <span className="price-value">${Number(price).toFixed(2)}</span>
-        </div>
-        <div className="cart-item-total">
-          <span className="total-label">Total</span>
-          <span className="total-value">${Number(itemTotal).toFixed(2)}</span>
-        </div>
-      </div>
+      {maxStock < quantity && <p role="status">Only {maxStock} currently available. Update or remove this item.</p>}
+      <button type="button" disabled={busy} onClick={remove}>Remove</button>
     </div>
-  );
-};
+    <div className="cart-item-price-section">
+      <p>Unit price: {formatMoney(price)}</p><strong>{formatMoney(Number(price) * quantity)}</strong>
+    </div>
+  </div>;
+}

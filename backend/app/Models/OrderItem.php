@@ -62,7 +62,7 @@ class OrderItem extends Model
      */
     public function getSubtotalAttribute()
     {
-        return $this->price * $this->quantity;
+        return \App\Services\CheckoutService::decimal(\App\Services\CheckoutService::minor((string) $this->price) * $this->quantity);
     }
 
     /**
@@ -70,7 +70,7 @@ class OrderItem extends Model
      */
     public function getFormattedSubtotalAttribute()
     {
-        return '$' . number_format($this->subtotal, 2);
+        return 'PKR ' . number_format($this->subtotal, 2);
     }
 
     /**
@@ -78,6 +78,6 @@ class OrderItem extends Model
      */
     public function getFormattedPriceAttribute()
     {
-        return '$' . number_format($this->price, 2);
+        return 'PKR ' . number_format($this->price, 2);
     }
 }

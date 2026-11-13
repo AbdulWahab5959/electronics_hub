@@ -1,101 +1,57 @@
-// src/context/CartContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components -- context is shared with useCart */
+import { createContext, useCallback, useEffect, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
 export const CartContext = createContext();
 
-export const useCart = () => {
-  const context = useContext(CartContext);
-  if (!context) throw new Error('useCart must be used within CartProvider');
-  return context;
-};
+export function CartProvider({ children }) {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const owner = isAuthenticated ? user.id : null;
+  const [state, setState] = useState({ owner: null, items: [], total: 0, count: 0, error: '' });
 
-export const CartProvider = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  const [cartItems, setCartItems] = useState([]);
-  const [cartCount, setCartCount] = useState(0);
-  const [cartTotal, setCartTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Load cart from backend when user logs in
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchCart();
-    } else {
-      setCartItems([]);
-      setCartCount(0);
-      setCartTotal(0);
-    }
-  }, [isAuthenticated]);
-
-  const fetchCart = async () => {
-    setIsLoading(true);
+  const fetchCart = useCallback(async (signal) => {
+    if (!owner) return;
     try {
-      const response = await api.get('/cart');
-      setCartItems(response.data.data.items);
-      setCartCount(response.data.data.count);
-      setCartTotal(response.data.data.total);
+      const response = await api.get('/cart', { signal });
+      if (!signal?.aborted) setState({ owner, ...response.data.data, error: '' });
     } catch (error) {
-      console.error('Failed to fetch cart', error);
-    } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) {
+        setState({ owner, items: [], total: 0, count: 0, error: error.response?.data?.message || 'Could not load your cart.' });
+      }
     }
-  };
+  }, [owner]);
 
-  const addToCart = async (product, quantity = 1) => {
-    if (!isAuthenticated) {
-      // Optionally redirect to login or show toast
-      return;
-    }
+  useEffect(() => {
+    const controller = new AbortController();
+    if (owner) void fetchCart(controller.signal);
+    return () => controller.abort();
+  }, [owner, fetchCart]);
+
+  const mutate = async request => {
+    if (!owner) return false;
     try {
-      await api.post('/cart', { product_id: product.id, quantity });
-      await fetchCart(); // refresh
+      await request();
+      await fetchCart();
       return true;
     } catch (error) {
-      console.error('Failed to add to cart', error);
+      setState(previous => ({
+        ...previous, owner, error: error.response?.data?.message || 'Cart update failed. Please retry.',
+      }));
       return false;
     }
   };
-
-  const updateQuantity = async (cartItemId, quantity) => {
-    try {
-      await api.put(`/cart/${cartItemId}`, { quantity });
-      await fetchCart();
-    } catch (error) {
-      console.error('Failed to update quantity', error);
-    }
-  };
-
-  const removeFromCart = async (cartItemId) => {
-    try {
-      await api.delete(`/cart/${cartItemId}`);
-      await fetchCart();
-    } catch (error) {
-      console.error('Failed to remove item', error);
-    }
-  };
-
-  const clearCart = async () => {
-    try {
-      await api.delete('/cart');
-      await fetchCart();
-    } catch (error) {
-      console.error('Failed to clear cart', error);
-    }
-  };
-
-  const value = {
-    cartItems,
-    cartCount,
-    cartTotal,
-    isLoading,
-    addToCart,
-    updateQuantity,
-    removeFromCart,
-    clearCart,
+  const visible = owner && state.owner === owner;
+  return <CartContext.Provider value={{
+    cartItems: visible ? state.items : [],
+    cartCount: visible ? state.count : 0,
+    cartTotal: visible ? Number(state.total) : 0,
+    isLoading: authLoading || Boolean(owner && state.owner !== owner),
+    error: visible ? state.error : '',
     fetchCart,
-  };
-
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
-};
+    addToCart: (product, quantity = 1) => mutate(() => api.post('/cart', { product_id: product.id, quantity })),
+    updateQuantity: (id, quantity) => mutate(() => api.put(`/cart/${id}`, { quantity })),
+    removeFromCart: id => mutate(() => api.delete(`/cart/${id}`)),
+    clearCart: () => mutate(() => api.delete('/cart')),
+  }}>{children}</CartContext.Provider>;
+}

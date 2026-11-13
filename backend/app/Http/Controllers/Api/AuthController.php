@@ -16,223 +16,122 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    /**
-     * Register a new user
-     */
     public function register(Request $request)
     {
-        $validated = $request->validate([
+        abort_unless($request->hasSession(), 400, 'Use the configured storefront origin for session authentication.');
+        $data = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => 'required|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
         ]);
-
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-        ]);
-
-        // Send email verification
+        $user = User::create($data);
+        // A limited session permits resend/logout only until verification.
+        Auth::guard('web')->login($user);
+        $request->session()->regenerate();
         event(new Registered($user));
 
         return response()->json([
-            'user' => $user,
-            'message' => 'Registration successful. Please verify your email.',
-            'requires_verification' => true
+            'message' => 'Account created. Verify your email, then sign in.',
+            'requires_verification' => true,
+            'email' => $user->email,
         ], 201);
     }
 
-    /**
-     * Login user
-     */
     public function login(Request $request)
     {
-        $request->validate([
+        abort_unless($request->hasSession(), 400, 'Use the configured storefront origin for session authentication.');
+        $data = $request->validate([
             'email' => 'required|email',
-            'password' => 'required',
+            'password' => 'required|string',
+            'remember' => 'sometimes|boolean',
         ]);
-
-        $user = User::where('email', $request->email)->first();
-
-        if (!$user) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
+        $user = User::where('email', $data['email'])->first();
+        // Do not disclose verification state until credentials are correct.
+        if (!$user || !Hash::check($data['password'], $user->password)) {
+            throw ValidationException::withMessages(['email' => 'The provided credentials are incorrect.']);
         }
-
-        // Check if email is verified
-        if (!$user->hasVerifiedEmail()) {
-            return response()->json([
-                'message' => 'Please verify your email address before logging in.',
-                'requires_verification' => true,
-                'email' => $user->email
-            ], 403);
-        }
-
-        if (!Auth::attempt($request->only('email', 'password'), true)) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
-        }
-
+        Auth::guard('web')->login($user, $user->hasVerifiedEmail() && $request->boolean('remember'));
         $request->session()->regenerate();
+        if (!$user->hasVerifiedEmail()) {
+            return $this->pendingVerification($user);
+        }
 
-        return response()->json([
-            'user' => Auth::user(),
-            'message' => 'Login successful'
-        ]);
+        return response()->json(['user' => $user, 'message' => 'Login successful']);
     }
 
-    /**
-     * Logout user
-     */
     public function logout(Request $request)
     {
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return response()->json([
-            'message' => 'Logged out successfully'
-        ]);
+        return response()->json(['message' => 'Logged out successfully']);
     }
 
-    /**
-     * Get authenticated user
-     */
     public function user(Request $request)
     {
-        return response()->json([
-            'user' => $request->user()
-        ]);
+        if (!$request->user()->hasVerifiedEmail()) {
+            return $this->pendingVerification($request->user());
+        }
+
+        return response()->json(['user' => $request->user()]);
     }
 
-    /**
-     * Email verification - verify email
-     */
+    private function pendingVerification(User $user)
+    {
+        return response()->json([
+            'message' => 'Please verify your email before continuing.',
+            'requires_verification' => true,
+            'email' => $user->email,
+        ], 403);
+    }
+
     public function verifyEmail(Request $request)
     {
-        $user = User::findOrFail($request->id);
-
-        if (!hash_equals((string) $request->hash, sha1($user->getEmailForVerification()))) {
-            return response()->json([
-                'message' => 'Invalid verification link'
-            ], 400);
+        $user = User::findOrFail($request->route('id'));
+        abort_unless(hash_equals(sha1($user->getEmailForVerification()), (string) $request->route('hash')), 403);
+        if (!$user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+            event(new Verified($user));
         }
 
-        if ($user->hasVerifiedEmail()) {
-            return response()->json([
-                'message' => 'Email already verified'
-            ]);
-        }
-
-        $user->markEmailAsVerified();
-        event(new Verified($user));
-
-        return response()->json([
-            'message' => 'Email verified successfully'
-        ]);
+        return response()->json(['message' => 'Email verified. You can now sign in.']);
     }
 
-    /**
-     * Resend verification email
-     */
     public function resendVerification(Request $request)
     {
-        $user = null;
-
-        if ($request->user()) {
-            $user = $request->user();
-        } else {
-            $request->validate([
-                'email' => 'required|email|exists:users,email',
-            ]);
-            $user = User::where('email', $request->email)->first();
+        $user = $request->user();
+        if (!$user->hasVerifiedEmail()) {
+            $user->sendEmailVerificationNotification();
         }
 
-        \Log::info('Resend verification called', [
-            'is_authenticated' => (bool) $request->user(),
-            'input_email' => $request->email,
-        ]);
-
-        if (!$user) {
-            return response()->json([
-                'message' => 'No account found with this email address.'
-            ], 404);
-        }
-
-        if ($user->hasVerifiedEmail()) {
-            return response()->json([
-                'message' => 'Email already verified. You can login now.'
-            ], 400);
-        }
-
-        $user->sendEmailVerificationNotification();
-
-        return response()->json([
-            'message' => 'Verification email sent! Please check your inbox.'
-        ]);
+        return response()->json(['message' => 'If verification is needed, an email has been sent.']);
     }
 
-    /**
-     * Send password reset link
-     */
     public function forgotPassword(Request $request)
     {
-        $request->validate([
-            'email' => 'required|email|exists:users,email',
-        ]);
+        $data = $request->validate(['email' => 'required|email|max:255']);
+        Password::sendResetLink($data);
 
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
-
-        if ($status === Password::RESET_LINK_SENT) {
-            return response()->json([
-                'success' => true,
-                'message' => 'We have emailed your password reset link!'
-            ]);
-        }
-
-        throw ValidationException::withMessages([
-            'email' => [trans($status)]
-        ]);
+        return response()->json(['success' => true, 'message' => 'If an account exists, a reset link has been sent.']);
     }
 
-    /**
-     * Reset password
-     */
     public function resetPassword(Request $request)
     {
-        $request->validate([
-            'token' => 'required',
-            'email' => 'required|email|exists:users,email',
-            'password' => 'required|min:8|confirmed',
+        $data = $request->validate([
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string|min:8|confirmed',
         ]);
-
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function ($user, $password) {
-                $user->forceFill([
-                    'password' => Hash::make($password)
-                ])->setRememberToken(Str::random(60));
-
-                $user->save();
-
-                event(new PasswordReset($user));
-            }
-        );
-
-        if ($status === Password::PASSWORD_RESET) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Password has been reset successfully!'
-            ]);
+        $status = Password::reset($data, function ($user, $password) {
+            $user->forceFill(['password' => Hash::make($password)])->setRememberToken(Str::random(60));
+            $user->save();
+            event(new PasswordReset($user));
+        });
+        if ($status !== Password::PASSWORD_RESET) {
+            throw ValidationException::withMessages(['email' => 'The reset link is invalid or expired. Request another link.']);
         }
 
-        throw ValidationException::withMessages([
-            'email' => [trans($status)]
-        ]);
+        return response()->json(['success' => true, 'message' => 'Password reset. Sign in with your new password.']);
     }
 }

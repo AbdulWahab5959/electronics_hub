@@ -33,7 +33,7 @@ export default function Register() {
     const result = await register(formData);
 
     if (result.success) {
-      navigate('/dashboard');
+      navigate('/verify-email', { state: { email: formData.email }, replace: true });
     } else {
       setError(result.error || 'Registration failed');
     }
@@ -68,12 +68,14 @@ export default function Register() {
 
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
-              <label>Full Name</label>
+              <label htmlFor="register-name">Full Name</label>
               <div className="input-wrapper">
                 <span className="input-icon">👤</span>
                 <input
                   type="text"
                   name="name"
+                  id="register-name"
+                  autoComplete="name"
                   value={formData.name}
                   onChange={handleChange}
                   placeholder="Enter your full name"
@@ -84,12 +86,14 @@ export default function Register() {
             </div>
 
             <div className="form-group">
-              <label>Email Address</label>
+              <label htmlFor="register-email">Email Address</label>
               <div className="input-wrapper">
                 <span className="input-icon">📧</span>
                 <input
                   type="email"
                   name="email"
+                  id="register-email"
+                  autoComplete="email"
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="Enter your email"
@@ -100,12 +104,14 @@ export default function Register() {
             </div>
 
             <div className="form-group">
-              <label>Password</label>
+              <label htmlFor="register-password">Password</label>
               <div className="input-wrapper">
                 <span className="input-icon">🔒</span>
                 <input
                   type="password"
                   name="password"
+                  id="register-password"
+                  autoComplete="new-password"
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="Create a password (min. 8 characters)"
@@ -116,12 +122,14 @@ export default function Register() {
             </div>
 
             <div className="form-group">
-              <label>Confirm Password</label>
+              <label htmlFor="register-password_confirmation">Confirm Password</label>
               <div className="input-wrapper">
                 <span className="input-icon">✓</span>
                 <input
                   type="password"
                   name="password_confirmation"
+                  id="register-password_confirmation"
+                  autoComplete="new-password"
                   value={formData.password_confirmation}
                   onChange={handleChange}
                   placeholder="Confirm your password"

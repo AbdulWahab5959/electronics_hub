@@ -4,11 +4,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
 import { SearchBar } from '../common/SearchBar';
+import { useToast } from '../common/ToastNotification';
 
 export const Header = ({ products = [] }) => {
   const { user, logout, isAuthenticated } = useAuth();
   const { cartCount } = useCart();
   const navigate = useNavigate();
+  const showToast = useToast();
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -31,7 +33,11 @@ export const Header = ({ products = [] }) => {
   };
 
   const handleLogout = async () => {
-    await logout();
+    const result = await logout();
+    if (!result.success) {
+      showToast(result.error, 'error');
+      return;
+    }
     closeMenus();
     navigate('/login');
   };

@@ -1,123 +1,93 @@
-// src/context/AuthContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components -- context is shared with useAuth */
+import { createContext, useState, useEffect, useRef } from 'react';
 import { login as apiLogin, register as apiRegister, logout as apiLogout, getUser } from '../services/auth';
 
-// Create and EXPORT the context (ONCE)
 export const AuthContext = createContext();
 
-// Custom hook to use auth context
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+const errorMessage = (error, fallback) =>
+  Object.values(error.response?.data?.errors || {}).flat()[0] || error.response?.data?.message || fallback;
 
-// Auth Provider component
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const revision = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const version = revision.current;
+    getUser({ signal: controller.signal })
+      .then(response => {
+        if (!controller.signal.aborted && version === revision.current) setUser(response.data.user);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && version === revision.current) setUser(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && version === revision.current) setIsLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   const loadUser = async () => {
-    setIsLoading(true);
+    revision.current += 1;
     try {
       const response = await getUser();
       setUser(response.data.user);
-      setIsAuthenticated(true);
-    } catch (error) {
+      return response.data.user;
+    } catch {
       setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
-    }
+      return null;
+    } finally { setIsLoading(false); }
   };
 
-  const login = async (credentials) => {
+  const login = async credentials => {
+    revision.current += 1;
     setIsLoading(true);
     try {
       const response = await apiLogin(credentials);
       setUser(response.data.user);
-      setIsAuthenticated(true);
       return { success: true, data: response.data };
     } catch (error) {
       setUser(null);
-      setIsAuthenticated(false);
-      
-      if (error.response?.status === 403 && error.response?.data?.requires_verification) {
-        return { 
-          success: false, 
-          requires_verification: true,
-          error: error.response?.data?.message || 'Please verify your email before logging in.'
-        };
-      }
-      
-      return { 
-        success: false, 
-        error: error.response?.data?.message || 'Login failed' 
+      return {
+        success: false,
+        requires_verification: Boolean(error.response?.data?.requires_verification),
+        error: errorMessage(error, 'Login failed. Please try again.'),
       };
-    } finally {
-      setIsLoading(false);
-    }
+    } finally { setIsLoading(false); }
   };
 
-  const register = async (userData) => {
+  const register = async values => {
+    revision.current += 1;
     setIsLoading(true);
     try {
-      const response = await apiRegister(userData);
-      setUser(response.data.user);
-      setIsAuthenticated(true);
-      return { 
-        success: true, 
-        data: response.data,
-        requires_verification: response.data.requires_verification || false
-      };
+      const response = await apiRegister(values);
+      setUser(null); // The server created a limited verification session, not a customer login.
+      return { success: true, data: response.data, requires_verification: true };
     } catch (error) {
       setUser(null);
-      setIsAuthenticated(false);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || 'Registration failed' 
-      };
-    } finally {
-      setIsLoading(false);
-    }
+      return { success: false, error: errorMessage(error, 'Registration failed. Please try again.') };
+    } finally { setIsLoading(false); }
   };
 
   const logout = async () => {
+    revision.current += 1;
     setIsLoading(true);
     try {
       await apiLogout();
       setUser(null);
-      setIsAuthenticated(false);
       return { success: true };
     } catch (error) {
-      setUser(null);
-      setIsAuthenticated(false);
-      return { success: false, error: 'Logout failed' };
-    } finally {
-      setIsLoading(false);
-    }
+      if (error.response?.status === 401) {
+        setUser(null);
+        return { success: true };
+      }
+      return { success: false, error: 'Logout could not be confirmed. Please retry.' };
+    } finally { setIsLoading(false); }
   };
 
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const value = {
-    user,
-    isLoading,
-    isAuthenticated,
-    login,
-    register,
-    logout,
-    loadUser,
-  };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
+  return <AuthContext.Provider value={{
+    user, isLoading, isAuthenticated: Boolean(user?.email_verified_at),
+    login, register, logout, loadUser,
+  }}>{children}</AuthContext.Provider>;
+}

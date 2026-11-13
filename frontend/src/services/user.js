@@ -7,7 +7,7 @@ export const updateProfile = (data) => api.put('/profile', data);
 export const changePassword = (data) => api.post('/change-password', data);
 
 // ========== ADDRESSES ==========
-export const getAddresses = () => api.get('/addresses');
+export const getAddresses = (config = {}) => api.get('/addresses', config);
 export const getAddress = (id) => api.get(`/addresses/${id}`);
 export const createAddress = (data) => api.post('/addresses', data);
 export const updateAddress = (id, data) => api.put(`/addresses/${id}`, data);

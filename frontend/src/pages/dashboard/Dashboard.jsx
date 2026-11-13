@@ -2,9 +2,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../components/common/ToastNotification';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
+  const showToast = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
   const firstName = user?.name?.split(' ')[0] || 'User';
@@ -18,7 +20,12 @@ export default function Dashboard() {
 
   const handleLogout = async () => {
     setIsLoading(true);
-    await logout();
+    const result = await logout();
+    if (!result.success) {
+      setIsLoading(false);
+      showToast(result.error, 'error');
+      return;
+    }
     window.location.href = '/login';
   };
 

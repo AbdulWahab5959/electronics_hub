@@ -18,6 +18,7 @@ import WishlistPage from './pages/WishlistPage';
 import ComparePage from './pages/ComparePage';
 import SearchResultsPage from './pages/SearchResultsPage';
 import CheckoutPage from './pages/CheckoutPage';
+import OrderSuccessPage from './pages/OrderSuccessPage';
 import OrdersPage from './pages/OrdersPage';
 import OrderDetailPage from './pages/OrderDetailPage';
 
@@ -33,7 +34,7 @@ import ResetPassword from './pages/auth/ResetPassword';
 import VerifyEmail from './pages/auth/VerifyEmail';
 
 function App() {
-  const { products, loading, error } = useProductData();
+  const { products, error } = useProductData();
 
   // Show a loading indicator while products are being fetched
   // if (loading) {
@@ -64,7 +65,8 @@ function App() {
 
                 <Route path="/product/:id" element={<ProductDetailPage />} />
                 <Route path="/cart" element={<Cart />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
+                <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+                <Route path="/order-success" element={<ProtectedRoute><OrderSuccessPage /></ProtectedRoute>} />
                 <Route path="/wishlist" element={<WishlistPage />} />
                 <Route path="/compare" element={<ComparePage />} />
                 <Route path="/search" element={<SearchResultsPage />} />

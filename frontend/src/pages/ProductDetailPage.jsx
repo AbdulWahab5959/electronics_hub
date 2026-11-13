@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Breadcrumb } from '../components/common/Breadcrumb';
 import { QuantitySelector } from '../components/common/QuantitySelector';
@@ -11,6 +11,10 @@ import { getProduct } from '../services/product';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
+  return <ProductDetail key={id} id={id} />;
+}
+
+function ProductDetail({ id }) {
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();   // ✅ authentication status
@@ -20,21 +24,17 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [adding, setAdding] = useState(false);
   const [activeTab, setActiveTab] = useState('description');
   const [relatedProducts, setRelatedProducts] = useState([]);
 
   useEffect(() => {
-    if (id) {
-      fetchProduct();
-    }
     window.scrollTo(0, 0);
-    setQuantity(1);
-  }, [id]);
-
-  const fetchProduct = async () => {
-    setLoading(true);
+    const controller = new AbortController();
+    const fetchProduct = async () => {
     try {
-      const response = await getProduct(id);
+      const response = await getProduct(id, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       const { product: productData, related_products } = response.data.data;
 
       // Parse specifications if it's a JSON string
@@ -62,35 +62,43 @@ export default function ProductDetailPage() {
       setProduct(productData);
       setRelatedProducts(related_products || []);
     } catch (error) {
-      console.error('Failed to load product:', error);
-      showToast('Failed to load product details', 'error');
-      setProduct(null);
+      if (!controller.signal.aborted) setError(error.response?.data?.message || 'Could not load this product.');
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  };
+    };
+    void fetchProduct();
+    return () => controller.abort();
+  }, [id]);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
+    if (adding) return;
     if (!isAuthenticated) {
       showToast('Please log in to add items to your cart.', 'info');
       navigate('/login');
       return;
     }
     if (product && product.stock > 0) {
-      addToCart(product, quantity);
-      showToast(`${quantity} × ${product.name} added to cart!`, 'success');
+      setAdding(true);
+      const success = await addToCart(product, quantity);
+      setAdding(false);
+      showToast(success ? `${quantity} × ${product.name} added to cart!` : 'Could not add this quantity. Check availability and retry.', success ? 'success' : 'error');
     }
   };
 
-  const handleBuyNow = () => {
+  const handleBuyNow = async () => {
+    if (adding) return;
     if (!isAuthenticated) {
       showToast('Please log in to proceed.', 'info');
       navigate('/login');
       return;
     }
     if (product && product.stock > 0) {
-      addToCart(product, quantity);
-      navigate('/cart');
+      setAdding(true);
+      const success = await addToCart(product, quantity);
+      setAdding(false);
+      if (success) navigate('/cart');
+      else showToast('Could not add this quantity. Check availability and retry.', 'error');
     }
   };
 
@@ -120,8 +128,6 @@ export default function ProductDetailPage() {
       </div>
     );
   }
-
-  const discount = product.discount || (product.original_price && product.price ? Math.round(((product.original_price - product.price) / product.original_price) * 100) : 0);
 
   return (
     <div className="product-detail-page">
@@ -210,7 +216,7 @@ export default function ProductDetailPage() {
                 <button 
                   className="add-to-cart-btn-detail"
                   onClick={handleAddToCart}
-                  disabled={product.stock <= 0}
+                  disabled={product.stock <= 0 || adding}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="9" cy="21" r="1"/>
@@ -223,7 +229,7 @@ export default function ProductDetailPage() {
                 <button 
                   className="buy-now-btn"
                   onClick={handleBuyNow}
-                  disabled={product.stock <= 0}
+                  disabled={product.stock <= 0 || adding}
                 >
                   Buy Now
                 </button>

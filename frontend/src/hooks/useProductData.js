@@ -1,32 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import api from '../services/api';
 
-export const useProductData = () => {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
+export function useProductData() {
+  const [state, setState] = useState({ products: [], loading: true, error: null });
   useEffect(() => {
-    let cancelled = false;
-
-    const fetchProducts = async () => {
-      try {
-        // Request a large number (or all) products for the search bar
-        const response = await fetch('/api/products?per_page=1000');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const json = await response.json();
-        const list = json.data?.data || json.data || [];
-        if (!cancelled) setProducts(list);
-      } catch (err) {
-        console.error('Failed to fetch products:', err);
-        if (!cancelled) setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    fetchProducts();
-    return () => { cancelled = true; };
+    const controller = new AbortController();
+    api.get('/products', { params: { per_page: 100 }, signal: controller.signal })
+      .then(response => {
+        if (!controller.signal.aborted) setState({ products: response.data.data.data, loading: false, error: null });
+      })
+      .catch(error => {
+        if (!controller.signal.aborted) setState({ products: [], loading: false, error: error.message });
+      });
+    return () => controller.abort();
   }, []);
-
-  return { products, loading, error };
-};
+  return state;
+}
