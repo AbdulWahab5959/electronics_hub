@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ArrowUp } from '@phosphor-icons/react/dist/csr/ArrowUp';
+import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
 
 export const Layout = ({ children, products = [] }) => {  // accept products prop
+  const { pathname } = useLocation();
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export const Layout = ({ children, products = [] }) => {  // accept products pro
   return (
     <div className="tech-layout">
       <Header products={products} />  {/* pass products to Header */}
-      <main className="tech-main">
+      <main className={'tech-main' + (pathname === '/dashboard' ? ' tech-main-account' : '')}>
         {children}
       </main>
       <Footer />
@@ -31,7 +32,7 @@ export const Layout = ({ children, products = [] }) => {  // accept products pro
         onClick={scrollToTop}
         aria-label="Scroll to top"
       >
-        <ArrowUp size={20} weight="regular" aria-hidden="true" />
+        Top
       </button>
     </div>
   );

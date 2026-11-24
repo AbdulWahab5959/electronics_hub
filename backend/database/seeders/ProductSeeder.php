@@ -1493,7 +1493,11 @@ class ProductSeeder extends Seeder
         ];
 
         foreach ($products as $product) {
-            Product::create($product);
+            // Repeated model entries must not recreate duplicate catalogue records.
+            Product::firstOrCreate([
+                'brand' => $product['brand'] ?? null,
+                'name' => $product['name'],
+            ], $product);
         }
     }
 }

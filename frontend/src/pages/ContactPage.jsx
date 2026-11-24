@@ -1,245 +1,108 @@
-// src/pages/ContactPage.jsx
-import React, { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { MapPin } from '@phosphor-icons/react/dist/csr/MapPin';
+import { ChatCircleText } from '@phosphor-icons/react/dist/csr/ChatCircleText';
+import { Package } from '@phosphor-icons/react/dist/csr/Package';
+import { CheckCircle } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { Breadcrumb } from '../components/common/Breadcrumb';
-import { useToast } from '../components/common/ToastNotification';
+import api, { refreshCSRF } from '../services/api';
+
+const blankForm = { name: '', email: '', subject: '', message: '', website: '' };
+const location = {
+  address: 'Gulberg Chowk, Mianwali',
+  region: 'Punjab, Pakistan',
+  // Official Google Maps Share > Embed a map URL for the supplied landmark.
+  embed: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3362.0637938525037!2d71.5433188!3d32.5778227!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3927182366506ba7%3A0xa5c4069e3a93e229!2sGulberg%20Chowk!5e0!3m2!1sen!2s!4v1795175438772!5m2!1sen!2s',
+  map: 'https://www.google.com/maps/search/?api=1&query=Gulberg%20Chowk%2C%20Mianwali%2C%20Pakistan',
+  directions: 'https://www.google.com/maps/dir/?api=1&destination=32.5778227%2C71.5433188',
+};
 
 export default function ContactPage() {
-  const showToast = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: '',
-  });
+  const [form, setForm] = useState(blankForm);
+  const [submitting, setSubmitting] = useState(false);
+  const pending = useRef(false);
   const [errors, setErrors] = useState({});
+  const [status, setStatus] = useState('');
+  const [reference, setReference] = useState('');
+  const formRef = useRef(null);
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    if (errors[e.target.name]) {
-      setErrors({ ...errors, [e.target.name]: '' });
+  function change(event) {
+    const { name, value } = event.target;
+    setForm(previous => ({ ...previous, [name]: value }));
+    setErrors(previous => ({ ...previous, [name]: '' }));
+    setStatus('');
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (pending.current) return;
+    const trimmed = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value.trim()]));
+    const invalid = {};
+    for (const key of ['name', 'email', 'subject', 'message']) if (!trimmed[key]) invalid[key] = 'Please complete this field.';
+    if (trimmed.message && trimmed.message.length < 10) invalid.message = 'Please include at least 10 characters.';
+    setErrors(invalid);
+    if (Object.keys(invalid).length) {
+      formRef.current?.elements.namedItem(Object.keys(invalid)[0])?.focus(); return;
     }
-  };
+    pending.current = true; setSubmitting(true); setStatus('');
+    try {
+      await refreshCSRF();
+      const response = await api.post('/contact', trimmed);
+      setReference(response.data.reference); setForm(blankForm);
+    } catch (error) {
+      if (error.response?.status === 422) {
+        const validation = Object.fromEntries(Object.entries(error.response.data.errors || {}).map(([key, messages]) => [key, messages[0]]));
+        setErrors(validation);
+        formRef.current?.elements.namedItem(Object.keys(validation)[0])?.focus();
+      }
+      setStatus(error.response?.status === 429 ? 'You’ve sent several messages. Please wait a minute before trying again.' : 'Your message could not be sent. Your details are still here; please try again.');
+    } finally { pending.current = false; setSubmitting(false); }
+  }
 
-  const validateForm = () => {
-    const newErrors = {};
-    if (!formData.name) newErrors.name = 'Name is required';
-    if (!formData.email) newErrors.email = 'Email is required';
-    if (!formData.subject) newErrors.subject = 'Subject is required';
-    if (!formData.message) newErrors.message = 'Message is required';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  function fieldError(name) {
+    return errors[name] ? <span id={`contact-${name}-error`} className="contact-field-error">{errors[name]}</span> : null;
+  }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
+  return <div className="store-contact"><div className="store-contact-container">
+    <Breadcrumb items={[{ name: 'Home', path: '/' }, { name: 'Contact' }]} />
+    <header className="store-contact-header">
+      <div><p className="contact-eyebrow">TECHHUB CUSTOMER CARE</p><h1>Let’s talk tech.</h1><p>Need help choosing a product, checking an order, or planning a visit? You’re in the right place.</p></div>
+      <Link to="/orders" className="contact-order-link"><Package size={23} aria-hidden="true" /><span>Already placed an order?<strong>View your orders</strong></span></Link>
+    </header>
 
-    setIsSubmitting(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      showToast('Message sent successfully! We\'ll get back to you soon.', 'success');
-      setFormData({
-        name: '',
-        email: '',
-        subject: '',
-        message: '',
-      });
-      setIsSubmitting(false);
-    }, 1500);
-  };
-
-  const contactInfo = [
-    {
-      icon: "📍",
-      title: "Visit Us",
-      details: ["123 Tech Street", "Lahore, Pakistan 54000"],
-    },
-    {
-      icon: "📞",
-      title: "Call Us",
-      details: ["+92 300 1234567", "+92 42 12345678"],
-    },
-    {
-      icon: "✉️",
-      title: "Email Us",
-      details: ["support@techhub.com", "sales@techhub.com"],
-    },
-    {
-      icon: "⏰",
-      title: "Business Hours",
-      details: ["Mon-Fri: 9am - 9pm", "Sat-Sun: 10am - 6pm"],
-    },
-  ];
-
-  const faqs = [
-    {
-      question: "How long does shipping take?",
-      answer: "Standard shipping takes 3-5 business days. Express shipping takes 1-2 business days.",
-    },
-    {
-      question: "What is your return policy?",
-      answer: "We offer 30-day hassle-free returns on all products. Items must be in original condition.",
-    },
-    {
-      question: "Do you offer warranty?",
-      answer: "Yes, all electronics come with a 24-month warranty. Terms and conditions apply.",
-    },
-    {
-      question: "How can I track my order?",
-      answer: "You can track your order from your account dashboard using the tracking number provided.",
-    },
-  ];
-
-  return (
-    <div className="contact-page">
-      <div className="container">
-        {/* Breadcrumb */}
-        <Breadcrumb 
-          items={[
-            { name: 'Home', path: '/' },
-            { name: 'Contact', path: '/contact' }
-          ]}
-        />
-
-        {/* Page Header */}
-        <div className="contact-header">
-          <h1>Contact Us</h1>
-          <p>We'd love to hear from you. Get in touch with our team.</p>
-        </div>
-
-        {/* Contact Grid */}
-        <div className="contact-grid">
-          {/* Contact Form */}
-          <div className="contact-form-card">
-            <h2>Send us a Message</h2>
-            <form onSubmit={handleSubmit} className="contact-form">
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Your Name *</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className={errors.name ? 'error' : ''}
-                    placeholder="John Doe"
-                  />
-                  {errors.name && <span className="error-msg">{errors.name}</span>}
-                </div>
-                <div className="form-group">
-                  <label>Email Address *</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className={errors.email ? 'error' : ''}
-                    placeholder="john@example.com"
-                  />
-                  {errors.email && <span className="error-msg">{errors.email}</span>}
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Subject *</label>
-                <input
-                  type="text"
-                  name="subject"
-                  value={formData.subject}
-                  onChange={handleChange}
-                  className={errors.subject ? 'error' : ''}
-                  placeholder="How can we help you?"
-                />
-                {errors.subject && <span className="error-msg">{errors.subject}</span>}
-              </div>
-
-              <div className="form-group">
-                <label>Message *</label>
-                <textarea
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  className={errors.message ? 'error' : ''}
-                  rows="6"
-                  placeholder="Please describe your inquiry..."
-                />
-                {errors.message && <span className="error-msg">{errors.message}</span>}
-              </div>
-
-              <button type="submit" className="submit-btn" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <span className="btn-spinner"></span>
-                    Sending...
-                  </>
-                ) : (
-                  'Send Message'
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Contact Info */}
-          <div className="contact-info-card">
-            <h2>Get in Touch</h2>
-            <p>Our team is here to help you with any questions.</p>
-
-            <div className="info-list">
-              {contactInfo.map((info, index) => (
-                <div key={index} className="info-item">
-                  <div className="info-icon">{info.icon}</div>
-                  <div className="info-content">
-                    <h4>{info.title}</h4>
-                    {info.details.map((detail, i) => (
-                      <p key={i}>{detail}</p>
-                    ))}
-                  </div>
-                </div>
-              ))}
+    <div className="store-contact-grid">
+      <section className="store-contact-form" aria-labelledby="message-heading">
+        <div className="contact-section-heading"><span className="contact-section-icon"><ChatCircleText size={23} aria-hidden="true" /></span><div><h2 id="message-heading">Send us a message</h2><p>Tell us what you need help with.</p></div></div>
+        {reference ? <div className="contact-success" role="status"><CheckCircle size={40} aria-hidden="true" /><h3>Message received</h3><p>Your message has been saved for the TechHub team.</p><p className="contact-reference">Your reference: <strong>{reference}</strong></p><button type="button" className="contact-button secondary" onClick={() => { setReference(''); setStatus(''); }}>Send another message</button></div> :
+          <form ref={formRef} onSubmit={submit} aria-labelledby="message-heading">
+            <div className="contact-field-row">
+              <div className="contact-field"><label htmlFor="contact-name">Full name <span aria-hidden="true">*</span></label><input id="contact-name" name="name" autoComplete="name" value={form.name} onChange={change} required maxLength={120} disabled={submitting} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'contact-name-error' : undefined} placeholder="Your full name" />{fieldError('name')}</div>
+              <div className="contact-field"><label htmlFor="contact-email">Email address <span aria-hidden="true">*</span></label><input id="contact-email" name="email" type="email" autoComplete="email" value={form.email} onChange={change} required maxLength={254} disabled={submitting} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'contact-email-error' : undefined} placeholder="you@example.com" />{fieldError('email')}</div>
             </div>
+            <div className="contact-field"><label htmlFor="contact-subject">Subject <span aria-hidden="true">*</span></label><input id="contact-subject" name="subject" value={form.subject} onChange={change} required maxLength={160} disabled={submitting} aria-invalid={Boolean(errors.subject)} aria-describedby={errors.subject ? 'contact-subject-error' : undefined} placeholder="e.g. Laptop availability or an order question" />{fieldError('subject')}</div>
+            <div className="contact-field"><label htmlFor="contact-message">Your message <span aria-hidden="true">*</span></label><textarea id="contact-message" name="message" rows={6} value={form.message} onChange={change} required minLength={10} maxLength={5000} disabled={submitting} aria-invalid={Boolean(errors.message)} aria-describedby={`contact-message-help${errors.message ? ' contact-message-error' : ''}`} placeholder="Include the product name or order reference so we can help." />{fieldError('message')}<div className="contact-message-meta"><span id="contact-message-help">Please don’t include passwords or payment details.</span><span>{form.message.length.toLocaleString()}/5,000</span></div></div>
+            <div className="contact-honeypot" aria-hidden="true"><label htmlFor="contact-website">Leave this field empty</label><input id="contact-website" name="website" autoComplete="off" tabIndex={-1} value={form.website} onChange={change} /></div>
+            {status && <p className="contact-submit-error" role="alert">{status}</p>}
+            <div className="contact-submit-row"><button type="submit" className="contact-button" disabled={submitting}>{submitting ? 'Sending message…' : 'Send message'}</button><span>Fields marked * are required.</span></div>
+          </form>}
+      </section>
 
-            {/* Social Links */}
-            <div className="social-connect">
-              <h4>Connect With Us</h4>
-              <div className="social-links-contact">
-                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="social-link fb">📘</a>
-                <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="social-link ig">📷</a>
-                <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="social-link tw">🐦</a>
-                <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="social-link li">🔗</a>
-                <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="social-link yt">🎥</a>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Map Section */}
-        <div className="map-section">
-          <h2>Find Us Here</h2>
-          <div className="map-placeholder">
-            <div className="map-content">
-              <span className="map-icon">📍</span>
-              <p>123 Tech Street, Lahore, Pakistan</p>
-              <small>Interactive map will be integrated here</small>
-            </div>
-          </div>
-        </div>
-
-        {/* FAQ Section */}
-        <div className="faq-section">
-          <h2>Frequently Asked Questions</h2>
-          <div className="faq-grid">
-            {faqs.map((faq, index) => (
-              <div key={index} className="faq-card">
-                <h4>{faq.question}</h4>
-                <p>{faq.answer}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <aside className="store-contact-location" aria-labelledby="location-heading">
+        <div className="contact-location-heading"><span className="contact-section-icon"><MapPin size={23} aria-hidden="true" /></span><div><h2 id="location-heading">Find us in Mianwali</h2><p>Gulberg Chowk</p></div></div>
+        <div className="contact-map-frame"><iframe src={location.embed} title="Google Maps: Gulberg Chowk, Mianwali, Pakistan" width="600" height="450" loading="lazy" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /></div>
+        <div className="contact-map-address"><address><strong>{location.address}</strong><span>{location.region}</span></address><a href={location.directions} target="_blank" rel="noopener noreferrer" className="contact-button">Get directions</a><a className="contact-map-link" href={location.map} target="_blank" rel="noopener noreferrer">Open in Google Maps</a></div>
+        <p className="contact-visit-note">The map shows the Gulberg Chowk landmark. Message us to confirm product availability before your visit.</p>
+      </aside>
     </div>
-  );
+
+    <section className="contact-help-section" aria-labelledby="help-heading">
+      <div><p className="contact-eyebrow">A LITTLE HELP, BEFORE YOU ASK</p><h2 id="help-heading">Good to know</h2><p>Quick answers for your next purchase.</p><Link to="/shop">Explore the shop</Link></div>
+      <div className="contact-help-list">
+        <details><summary>Where can I check my order?</summary><p>Sign in and open <Link to="/orders">your orders</Link> to view the order details and current status. Include your order reference if you need help.</p></details>
+        <details><summary>How much will delivery cost?</summary><p>Shipping charges and the final total are confirmed at checkout before you place your order.</p></details>
+        <details><summary>Can I check availability before visiting?</summary><p>Yes. Send us the product name using the form above. The product page also shows current stock, which is checked again when you add it to your cart.</p></details>
+        <details><summary>How do I ask about a return or warranty?</summary><p>Send us your order reference, product name, and a description of the issue. Ask the team to confirm the applicable terms before arranging a return.</p></details>
+      </div>
+    </section>
+  </div></div>;
 }

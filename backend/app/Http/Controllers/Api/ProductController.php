@@ -14,7 +14,7 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Product::query();
+        $query = Product::uniqueModels();
         
         // Filter by category
         if ($request->has('category')) {
@@ -87,7 +87,7 @@ class ProductController extends Controller
         }
         
         $perPage = max(1, min(100, (int) $request->get('per_page', 12)));
-        $products = $query->paginate($perPage);
+        $products = $query->orderBy('id')->paginate($perPage);
         
         // Add calculated fields to each product
         $products->getCollection()->transform(function($product) {
@@ -144,14 +144,15 @@ class ProductController extends Controller
      */
     public function categories()
     {
-        $categories = Product::select('category')
+        $categories = Product::uniqueModels()->select('category')
             ->selectRaw('COUNT(*) as count')
             ->groupBy('category')
             ->get();
         
         return response()->json([
             'success' => true,
-            'data' => $categories
+            'data' => $categories,
+            'price_range' => ['min' => 0, 'max' => (int) ceil(Product::max('price') ?? 0)]
         ]);
     }
     
@@ -161,7 +162,7 @@ class ProductController extends Controller
      */
     public function brands()
     {
-        $brands = Product::select('brand')
+        $brands = Product::uniqueModels()->select('brand')
             ->whereNotNull('brand')
             ->selectRaw('COUNT(*) as count')
             ->groupBy('brand')

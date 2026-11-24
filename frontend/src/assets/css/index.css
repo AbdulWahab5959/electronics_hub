@@ -194,7 +194,6 @@
 }
 
 .search-input:focus {
-  outline: none;
   border-color: var(--color-primary-500);
 }
 
@@ -722,7 +721,6 @@
 
 .search-input-wrapper:focus-within {
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .search-icon {
@@ -743,7 +741,6 @@
   border: none;
   font-size: var(--font-base);
   background: transparent;
-  outline: none;
   color: var(--color-gray-800);
 }
 
@@ -1273,7 +1270,6 @@
 
 .quantity-selector-premium:focus-within .qs-controls {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 /* Buttons */
@@ -1370,7 +1366,6 @@
   color: #1f2937;
   background: transparent;
   border: none;
-  outline: none;
   font-family: inherit;
 }
 
@@ -2691,7 +2686,6 @@
 .price-input-wrapper input {
   flex: 1;
   border: none;
-  outline: none;
   font-size: 0.875rem;
   font-weight: 500;
   background: transparent;
@@ -3057,7 +3051,6 @@
 }
 
 .per-page-select:focus {
-  outline: none;
   border-color: var(--color-primary-500);
 }
 
@@ -3643,13 +3636,11 @@
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   font-size: 1rem;
-  outline: none;
   transition: all 0.3s;
 }
 
 .newsletter-form input:focus {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .newsletter-form button {
@@ -4111,7 +4102,6 @@
   border-radius: 10px;
   color: white;
   font-size: 0.875rem;
-  outline: none;
   transition: all 0.3s;
 }
 
@@ -4986,14 +4976,12 @@
   border-radius: 1rem;
   font-size: 1rem;
   transition: all 0.3s;
-  outline: none;
   background: white;
   font-family: inherit;
 }
 
 .input-wrapper input:focus {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
 }
 
 .input-wrapper input:disabled {
@@ -5430,7 +5418,6 @@
 }
 
 .sort-select:focus {
-  outline: none;
   border-color: #3b82f6;
 }
 
@@ -6262,9 +6249,7 @@
 
 .form-group input:focus,
 .form-group select:focus {
-  outline: none;
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .form-group input.error,
@@ -8988,7 +8973,6 @@
   border-radius: 1rem;
   font-size: 1rem;
   transition: all 0.3s;
-  outline: none;
   background: white;
   font-family: inherit;
 }
@@ -9001,7 +8985,6 @@
   border-radius: 1rem;
   font-size: 1rem;
   transition: all 0.3s;
-  outline: none;
   background: white;
   font-family: inherit;
   resize: vertical;
@@ -9010,7 +8993,6 @@
 .input-wrapper input:focus,
 .input-wrapper textarea:focus {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
 }
 
 .input-wrapper input:disabled,
@@ -10252,7 +10234,6 @@
   border-radius: 18px !important;
   padding: 0 16px !important;
   font-size: 15px !important;
-  outline: none !important;
 }
 
 .coupon-apply-btn {
@@ -10970,7 +10951,6 @@
   font-size: 13px !important;
   color: #0f172a !important;
   background: #f8fafc !important;
-  outline: none !important;
 }
 
 .coupon-input:focus {

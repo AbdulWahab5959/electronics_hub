@@ -2,7 +2,7 @@
 import api from './api';
 
 // Get user's wishlist
-export const getWishlist = () => api.get('/wishlist');
+export const getWishlist = (config = {}) => api.get('/wishlist', config);
 
 // Add product to wishlist
 export const addToWishlist = (productId) => {

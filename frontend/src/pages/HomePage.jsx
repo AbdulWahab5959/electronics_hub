@@ -1,4 +1,8 @@
 import { Link } from 'react-router-dom';
+import { CreditCard } from '@phosphor-icons/react/dist/csr/CreditCard';
+import { Headset } from '@phosphor-icons/react/dist/csr/Headset';
+import { ShieldCheck } from '@phosphor-icons/react/dist/csr/ShieldCheck';
+import { Truck } from '@phosphor-icons/react/dist/csr/Truck';
 import { ProductCard } from '../components/common/ProductCard';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
@@ -52,11 +56,16 @@ export default function HomePage({ products = [], loading = false, error = null 
     <div className="storefront-home">
       <section className="store-hero" aria-labelledby="home-heading">
         <div className="store-hero-copy">
-          <h1 id="home-heading">Find the right tech.</h1>
+          <p className="store-eyebrow">Electronics for real life</p>
+          <h1 id="home-heading">Tech that fits the way you live and work.</h1>
           <p className="store-hero-description">
-            Explore laptops, phones, audio and accessories from brands you know.
+            Compare practical choices for your desk, your bag, and your home—then order with help when you need it.
           </p>
-          <Link to="/shop" className="store-primary-link">Browse the shop</Link>
+          <div className="store-hero-actions">
+            <Link to="/shop" className="store-primary-link">Browse products</Link>
+            <Link to="/compare" className="store-secondary-link">Compare products</Link>
+          </div>
+          <p className="store-hero-note">Browse by category, compare details, and build a cart at your own pace.</p>
         </div>
         <div className="store-hero-media">
           <img
@@ -64,6 +73,45 @@ export default function HomePage({ products = [], loading = false, error = null 
             alt="Laptop from the electronics collection"
             fetchPriority="high"
           />
+          <div className="store-hero-media-caption">
+            <span>Tools for work, study, and everyday life</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-service-panel" aria-labelledby="service-heading">
+        <div className="home-service-lead">
+          <span className="home-service-icon" aria-hidden="true"><Truck size={28} weight="duotone" /></span>
+          <div>
+            <p className="store-eyebrow">Delivery and support</p>
+            <h2 id="service-heading">Get the right product, with a clear next step.</h2>
+            <p>Choose what fits, review the details, and contact us if you need help before placing an order.</p>
+            <Link to="/contact" className="home-text-link">Ask about delivery or product support</Link>
+          </div>
+        </div>
+
+        <div className="home-service-list">
+          <article className="home-service-item">
+            <ShieldCheck size={22} weight="duotone" aria-hidden="true" />
+            <div>
+              <h3>Product details first</h3>
+              <p>Use product pages and comparison tools to make an informed choice.</p>
+            </div>
+          </article>
+          <article className="home-service-item">
+            <CreditCard size={22} weight="duotone" aria-hidden="true" />
+            <div>
+              <h3>Simple checkout</h3>
+              <p>Keep your selections together and review your cart before checkout.</p>
+            </div>
+          </article>
+          <article className="home-service-item">
+            <Headset size={22} weight="duotone" aria-hidden="true" />
+            <div>
+              <h3>Human help</h3>
+              <p>Contact the TechHub team when you need guidance on a product.</p>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -83,7 +131,6 @@ export default function HomePage({ products = [], loading = false, error = null 
                   <img src={category.image} alt="" loading="lazy" />
                 )}
                 <span>{category.name}</span>
-                <span className="store-category-arrow" aria-hidden="true">→</span>
               </Link>
             ))}
           </div>
@@ -92,9 +139,13 @@ export default function HomePage({ products = [], loading = false, error = null 
 
       <section className="store-section store-products-section" aria-labelledby="products-heading">
         <div className="store-section-heading">
-          <h2 id="products-heading">
-            {featuredProducts.length > 0 ? 'Featured products' : 'Products'}
-          </h2>
+          <div>
+            <p className="store-eyebrow">Selected for the shop</p>
+            <h2 id="products-heading">
+              {featuredProducts.length > 0 ? 'Featured products' : 'Products'}
+            </h2>
+          </div>
+          <Link to="/shop" className="home-text-link">View all products</Link>
         </div>
 
         {loading ? (
@@ -136,6 +187,23 @@ export default function HomePage({ products = [], loading = false, error = null 
             There are no products in the catalogue yet.
           </p>
         )}
+      </section>
+
+      <section className="home-story" aria-labelledby="about-heading">
+        <div className="home-story-mark" aria-hidden="true">
+          <span>TH</span>
+        </div>
+        <div className="home-story-copy">
+          <p className="store-eyebrow">About TechHub</p>
+          <h2 id="about-heading">A practical electronics store for everyday decisions.</h2>
+          <p>
+            TechHub brings laptops, phones, audio, accessories, and comparison tools into one straightforward place. We focus on the information that helps you choose, not noise that gets in the way.
+          </p>
+          <div className="home-story-actions">
+            <Link to="/shop" className="store-secondary-link">Explore the catalogue</Link>
+            <Link to="/contact" className="home-text-link">Contact TechHub</Link>
+          </div>
+        </div>
       </section>
     </div>
   );

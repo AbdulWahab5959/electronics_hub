@@ -4,10 +4,22 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
 class Product extends Model
 {
     use HasFactory;
+
+    protected $hidden = ['identity_brand', 'identity_model'];
+
+    /** Keep the oldest record for each brand and model in catalogue lists. */
+    public function scopeUniqueModels(Builder $query): Builder
+    {
+        return $query->whereIn('products.id', function ($models) {
+            $models->selectRaw('MIN(id)')->from('products')
+                ->groupByRaw("LOWER(TRIM(COALESCE(brand, ''))), LOWER(TRIM(name))");
+        });
+    }
 
     /**
      * The attributes that are mass assignable.

@@ -88,7 +88,7 @@ export default function ForgotPassword() {
             </button>
 
             <div className="auth-link">
-              <Link to="/login">← Back to Login</Link>
+              <Link to="/login">Back to Login</Link>
             </div>
           </form>
         </div>

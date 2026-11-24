@@ -1,244 +1,92 @@
-// src/pages/WishlistPage.jsx
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Heart } from '@phosphor-icons/react/dist/csr/Heart';
+import { ShoppingCartSimple } from '@phosphor-icons/react/dist/csr/ShoppingCartSimple';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/common/ToastNotification';
 import { Breadcrumb } from '../components/common/Breadcrumb';
-import { Button } from '../components/common/Button';
+import { RatingStars } from '../components/common/RatingStars';
+import { getProducts } from '../services/product';
+import { readStoredArray, writeStoredArray } from '../utils/comparison';
+import { hydrateWishlist, moveSavedItems } from '../utils/wishlist';
+import { formatMoney } from '../utils/money';
 
 export default function WishlistPage() {
   const { isAuthenticated } = useAuth();
-  const { addToCart } = useCart();
+  const { addToCart, isUpdating } = useCart();
+  const navigate = useNavigate();
   const showToast = useToast();
-  
-  const [wishlistItems, setWishlistItems] = useState([]);
+  const [catalogue, setCatalogue] = useState([]);
+  const [saved, setSaved] = useState(() => readStoredArray('wishlist'));
   const [loading, setLoading] = useState(true);
-  const [addingToCart, setAddingToCart] = useState(null);
-
-  // Load wishlist from localStorage
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
-    loadWishlist();
+    const controller = new AbortController();
+    async function load() {
+      setLoading(true); setError('');
+      try {
+        const products = [];
+        let page = 1, last = 1;
+        do {
+          const response = await getProducts({ per_page: 100, page }, { signal: controller.signal });
+          products.push(...response.data.data.data);
+          last = response.data.data.last_page; page++;
+        } while (page <= last && !controller.signal.aborted);
+        if (!controller.signal.aborted) setCatalogue(products);
+      } catch { if (!controller.signal.aborted) setError('Could not refresh prices and stock. Your saved items are safe. Please retry.'); }
+      finally { if (!controller.signal.aborted) setLoading(false); }
+    }
+    void load();
+    return () => controller.abort();
+  }, [reload]);
+  useEffect(() => {
+    const refresh = () => setSaved(readStoredArray('wishlist'));
+    window.addEventListener('wishlistUpdated', refresh); window.addEventListener('storage', refresh);
+    return () => { window.removeEventListener('wishlistUpdated', refresh); window.removeEventListener('storage', refresh); };
   }, []);
-
-  const loadWishlist = () => {
-    setLoading(true);
-    const savedWishlist = JSON.parse(localStorage.getItem('wishlist') || '[]');
-    setWishlistItems(savedWishlist);
-    setLoading(false);
-  };
-
-  // Add to cart and remove from wishlist
-  const handleAddToCart = async (product) => {
-    setAddingToCart(product.id);
-    
-    // Add to cart
-    addToCart(product, 1);
-    
-    // Remove from wishlist
-    const updatedWishlist = wishlistItems.filter(item => item.id !== product.id);
-    setWishlistItems(updatedWishlist);
-    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
-    
-    showToast(`${product.name} added to cart!`, 'success');
-    setAddingToCart(null);
-  };
-
-  // Remove from wishlist only
-  const handleRemoveFromWishlist = (productId, productName) => {
-    const updatedWishlist = wishlistItems.filter(item => item.id !== productId);
-    setWishlistItems(updatedWishlist);
-    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
-    showToast(`${productName} removed from wishlist`, 'info');
-  };
-
-  // Move all items to cart
-  const handleMoveAllToCart = () => {
-    wishlistItems.forEach(item => {
-      addToCart(item, 1);
-    });
-    setWishlistItems([]);
-    localStorage.setItem('wishlist', '[]');
-    showToast(`All items moved to cart!`, 'success');
-  };
-
-  // Clear entire wishlist
-  const handleClearWishlist = () => {
-    setWishlistItems([]);
-    localStorage.setItem('wishlist', '[]');
-    showToast('Wishlist cleared', 'info');
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <div className="wishlist-page">
-        <div className="container">
-          <div className="auth-required-wishlist">
-            <div className="auth-icon">❤️</div>
-            <h2>Please Login to View Wishlist</h2>
-            <p>Sign in to access your saved items</p>
-            <Link to="/login" className="btn-primary">Login Now</Link>
-            <Link to="/register" className="btn-secondary">Create Account</Link>
-          </div>
-        </div>
-      </div>
-    );
+  const items = hydrateWishlist(saved, catalogue);
+  function persist(next) {
+    if (!writeStoredArray('wishlist', next)) {
+      showToast('Your browser could not update your wishlist. Please retry.', 'error'); return false;
+    }
+    setSaved(next); window.dispatchEvent(new Event('wishlistUpdated')); return true;
   }
-
-  return (
-    <div className="wishlist-page">
-      <div className="container">
-        {/* Breadcrumb */}
-        <Breadcrumb 
-          items={[
-            { name: 'Home', path: '/' },
-            { name: 'Wishlist', path: '/wishlist' }
-          ]}
-        />
-
-        {/* Page Header */}
-        <div className="wishlist-header">
-          <div>
-            <h1>My Wishlist</h1>
-            <p>Products you've saved for later</p>
-          </div>
-          {wishlistItems.length > 0 && (
-            <div className="header-actions">
-              <button onClick={handleMoveAllToCart} className="move-all-btn">
-                🛒 Move All to Cart
-              </button>
-              <button onClick={handleClearWishlist} className="clear-all-btn">
-                🗑️ Clear All
-              </button>
-            </div>
-          )}
+  function remove(id) {
+    // Resolve old duplicate IDs as well, without overwriting another tab's additions.
+    const current = readStoredArray('wishlist');
+    return persist(current.filter(item => String(hydrateWishlist([item], catalogue)[0]?.id) !== String(id)));
+  }
+  async function move(products) {
+    if (pending.current || isUpdating) return;
+    if (!isAuthenticated) { navigate('/login', { state: { from: '/wishlist' } }); return; }
+    pending.current = true; setBusy(true);
+    try {
+      const moved = await moveSavedItems(products, addToCart, remove);
+      const eligible = products.filter(p => p.available && Number(p.stock) > 0).length;
+      showToast(moved ? `${moved} ${moved === 1 ? 'item added' : 'items added'} to cart.${moved < eligible ? ' Other items remain saved; check cart limits and stock.' : ''}` : 'Could not add these items. They remain in your wishlist. Check stock and retry.', moved === eligible && moved ? 'success' : 'info');
+    } finally { pending.current = false; setBusy(false); }
+  }
+  const locked = busy || isUpdating;
+  return <div className="wishlist-page commerce-wishlist"><div className="container">
+    <Breadcrumb items={[{ name: 'Home', path: '/' }, { name: 'Wishlist' }]} />
+    <header className="wishlist-header">
+      <div><p className="commerce-eyebrow">SAVED FOR LATER</p><h1>Your wishlist</h1><p>{saved.length ? `${items.length} saved ${items.length === 1 ? 'product' : 'products'}` : 'Keep your favourites in one place.'}</p></div>
+      {items.length > 0 && <div className="header-actions"><button type="button" className="commerce-primary" disabled={locked || loading || Boolean(error) || !items.some(p => p.available && p.stock > 0)} onClick={() => move(items)}><ShoppingCartSimple size={19} />{busy ? 'Adding…' : 'Add available items to cart'}</button><button type="button" className="commerce-secondary" disabled={locked} onClick={() => persist([])}>Clear wishlist</button></div>}
+    </header>
+    <p className="commerce-notice">Saved in this browser. Prices and availability are refreshed from our catalogue.{!isAuthenticated && ' Sign in when you’re ready to add items to your cart.'}</p>
+    {loading ? <div className="commerce-state" role="status">Refreshing your saved products…</div> : error ? <div className="commerce-state" role="alert"><p>{error}</p><button type="button" className="commerce-secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div> : !items.length ? <div className="commerce-state"><Heart size={42} aria-hidden="true" /><h2>Your wishlist is empty</h2><p>Tap the heart on a product to save it here.</p><Link to="/shop" className="commerce-primary">Explore the shop</Link></div> : <>
+      <div className="wishlist-grid">{items.map(item => <article className="wishlist-card" key={item.id}>
+        <Link to={item.available ? `/product/${item.id}` : '/shop'} className="wishlist-image"><img src={item.image || '/product-placeholder.svg'} alt={item.name} loading="lazy" onError={e => { e.target.onerror = null; e.target.src = '/product-placeholder.svg'; }} /></Link>
+        <div className="wishlist-info"><p className="product-brand">{item.brand || 'Saved product'}</p><Link to={item.available ? `/product/${item.id}` : '/shop'} className="product-title">{item.name}</Link>
+          {item.available && <><RatingStars rating={Number(item.rating) || 0} totalReviews={Number(item.reviews) || 0} size="sm" /><div className="product-price"><strong>{formatMoney(item.price)}</strong>{Number(item.original_price) > Number(item.price) && <del>{formatMoney(item.original_price)}</del>}</div></>}
+          <p className="commerce-stock">{!item.available ? 'No longer available' : item.stock > 0 ? 'In stock' : 'Out of stock'}</p>
+          <div className="wishlist-actions"><button type="button" className="commerce-primary" disabled={locked || !item.available || item.stock <= 0} onClick={() => move([item])}><ShoppingCartSimple size={18} />{busy ? 'Adding…' : 'Add to cart'}</button><button type="button" className="commerce-secondary" disabled={locked} aria-label={`Remove ${item.name} from wishlist`} onClick={() => remove(item.id)}>Remove</button></div>
         </div>
-
-        {/* Loading State */}
-        {loading && (
-          <div className="wishlist-loading">
-            <div className="loader-spinner-premium loader-lg"></div>
-            <p>Loading your wishlist...</p>
-          </div>
-        )}
-
-        {/* Empty Wishlist */}
-        {!loading && wishlistItems.length === 0 && (
-          <div className="empty-wishlist">
-            <div className="empty-icon">❤️</div>
-            <h3>Your wishlist is empty</h3>
-            <p>Save items you love to your wishlist and they'll appear here.</p>
-            <div className="empty-actions">
-              <Link to="/shop" className="btn-primary">Start Shopping</Link>
-              <Link to="/deals" className="btn-secondary">View Deals</Link>
-            </div>
-            <div className="featured-categories">
-              <h4>Popular Categories</h4>
-              <div className="categories-links">
-                <Link to="/category/laptops">💻 Laptops</Link>
-                <Link to="/category/headphones">🎧 Headphones</Link>
-                <Link to="/category/smartwatches">⌚ Smartwatches</Link>
-                <Link to="/category/gaming">🎮 Gaming</Link>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Wishlist Grid */}
-        {!loading && wishlistItems.length > 0 && (
-          <>
-            <div className="wishlist-stats">
-              <span className="items-count">
-                {wishlistItems.length} {wishlistItems.length === 1 ? 'item' : 'items'} in wishlist
-              </span>
-            </div>
-
-            <div className="wishlist-grid">
-              {wishlistItems.map((item) => (
-                <div key={item.id} className="wishlist-card">
-                  {/* Product Image */}
-                  <Link to={`/product/${item.id}`} className="wishlist-image">
-                    <img src={item.image} alt={item.name} />
-                    {item.discount > 0 && (
-                      <span className="discount-badge">-{item.discount}%</span>
-                    )}
-                  </Link>
-
-                  {/* Product Info */}
-                  <div className="wishlist-info">
-                    <Link to={`/product/${item.id}`} className="product-title">
-                      {item.name}
-                    </Link>
-                    
-                    <div className="product-price">
-                      <span className="current-price">${item.price.toFixed(2)}</span>
-                      {item.originalPrice > item.price && (
-                        <span className="original-price">${item.originalPrice.toFixed(2)}</span>
-                      )}
-                    </div>
-
-                    {/* Rating */}
-                    {item.rating && (
-                      <div className="product-rating">
-                        <div className="stars">
-                          {[...Array(5)].map((_, i) => (
-                            <span key={i} className={i < Math.floor(item.rating) ? 'star filled' : 'star'}>
-                              ★
-                            </span>
-                          ))}
-                        </div>
-                        <span className="review-count">({item.reviews})</span>
-                      </div>
-                    )}
-
-                    {/* Stock Status */}
-                    <div className="stock-status">
-                      {item.inStock !== false ? (
-                        <span className="in-stock">✓ In Stock</span>
-                      ) : (
-                        <span className="out-of-stock">Out of Stock</span>
-                      )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="wishlist-actions">
-                      <button 
-                        className="add-to-cart-wishlist"
-                        onClick={() => handleAddToCart(item)}
-                        disabled={addingToCart === item.id || item.inStock === false}
-                      >
-                        {addingToCart === item.id ? (
-                          <>
-                            <span className="btn-spinner-small"></span>
-                            Adding...
-                          </>
-                        ) : (
-                          <>
-                            🛒 Add to Cart
-                          </>
-                        )}
-                      </button>
-                      <button 
-                        className="remove-wishlist"
-                        onClick={() => handleRemoveFromWishlist(item.id, item.name)}
-                      >
-                        🗑️ Remove
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Continue Shopping */}
-            <div className="continue-shopping-wishlist">
-              <Link to="/shop" className="continue-link">
-                ← Continue Shopping
-              </Link>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
+      </article>)}</div><Link className="commerce-continue" to="/shop">Continue shopping</Link>
+    </>}
+  </div></div>;
 }

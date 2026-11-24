@@ -1,152 +1,111 @@
 // src/pages/ComparePage.jsx
-import React, { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { CheckCircle } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { MagnifyingGlass } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
+import { Scales } from '@phosphor-icons/react/dist/csr/Scales';
+import { ShoppingCartSimple } from '@phosphor-icons/react/dist/csr/ShoppingCartSimple';
+import { X } from '@phosphor-icons/react/dist/csr/X';
 import { useCart } from '../hooks/useCart';
 import { useToast } from '../components/common/ToastNotification';
 import { Breadcrumb } from '../components/common/Breadcrumb';
-import { Button } from '../components/common/Button';
+import { getProducts } from '../services/product';
+import { useAuth } from '../hooks/useAuth';
+import { formatMoney } from '../utils/money';
+import { comparisonProductKey, readStoredArray, restoreComparison, writeStoredArray } from '../utils/comparison';
 
 export default function ComparePage() {
   const { addToCart } = useCart();
+  const { isAuthenticated } = useAuth();
+  const comparisonHeading = useRef(null);
   const showToast = useToast();
   
   const [compareItems, setCompareItems] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [category, setCategory] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [showSearch, setShowSearch] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(8);
+  const [reloadKey, setReloadKey] = useState(0);
   const [addingToCart, setAddingToCart] = useState(null);
 
-  // Mock products for search
-  const allProducts = [
-    {
-      id: 1,
-      name: "MacBook Pro 16\" M3 Chip",
-      price: 2499.99,
-      originalPrice: 2799.99,
-      image: "https://placehold.co/400x400/3b82f6/white?text=MacBook+Pro",
-      rating: 4.9,
-      reviews: 3245,
-      category: "Laptops",
-      brand: "Apple",
-      specs: {
-        processor: "Apple M3 (12-core)",
-        ram: "18GB Unified",
-        storage: "512GB SSD",
-        display: "16.2-inch Liquid Retina XDR",
-        battery: "Up to 22 hours",
-        weight: "4.7 lbs",
-        os: "macOS",
-      },
-      features: ["M3 Chip", "Liquid Retina XDR", "1080p Camera", "Studio-quality mics"],
-      inStock: true,
-    },
-    {
-      id: 2,
-      name: "Sony WH-1000XM5 Headphones",
-      price: 349.99,
-      originalPrice: 399.99,
-      image: "https://placehold.co/400x400/8b5cf6/white?text=Sony+Headphones",
-      rating: 4.8,
-      reviews: 5678,
-      category: "Audio",
-      brand: "Sony",
-      specs: {
-        type: "Over-ear",
-        connectivity: "Bluetooth 5.2",
-        battery: "30 hours",
-        noiseCancelling: "Yes",
-        weight: "250g",
-      },
-      features: ["Noise Cancelling", "30hr Battery", "Quick Charge", "Multipoint"],
-      inStock: true,
-    },
-    {
-      id: 3,
-      name: "Apple Watch Ultra 2",
-      price: 749.99,
-      originalPrice: 799.99,
-      image: "https://placehold.co/400x400/10b981/white?text=Apple+Watch",
-      rating: 4.7,
-      reviews: 2341,
-      category: "Wearables",
-      brand: "Apple",
-      specs: {
-        display: "1.92-inch Retina",
-        battery: "36 hours",
-        waterResistant: "100m",
-        gps: "Yes",
-        cellular: "Yes",
-      },
-      features: ["Titanium Case", "Dual-frequency GPS", "Siren", "Emergency SOS"],
-      inStock: true,
-    },
-    {
-      id: 4,
-      name: "Logitech MX Master 3S",
-      price: 89.99,
-      originalPrice: 99.99,
-      image: "https://placehold.co/400x400/f59e0b/white?text=MX+Master",
-      rating: 4.6,
-      reviews: 1876,
-      category: "Accessories",
-      brand: "Logitech",
-      specs: {
-        sensor: "8K DPI",
-        buttons: "6",
-        connectivity: "Bluetooth + USB",
-        battery: "70 days",
-      },
-      features: ["MagSpeed Wheel", "Quiet Clicks", "8K DPI", "Multi-device"],
-      inStock: true,
-    },
-    {
-      id: 5,
-      name: "Keychron K2 Mechanical Keyboard",
-      price: 79.99,
-      originalPrice: 99.99,
-      image: "https://placehold.co/400x400/ef4444/white?text=Keychron",
-      rating: 4.8,
-      reviews: 3421,
-      category: "Keyboards",
-      brand: "Keychron",
-      specs: {
-        layout: "75%",
-        switchType: "Gateron Pro",
-        connectivity: "Bluetooth + USB-C",
-        battery: "4000mAh",
-      },
-      features: ["Hot-swappable", "RGB Backlight", "Mac/Win Layout", "Wireless"],
-      inStock: true,
-    },
-  ];
-
-  // Load compare items from localStorage
   useEffect(() => {
-    loadCompareItems();
-  }, []);
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const products = [];
+        let page = 1;
+        let lastPage = 1;
+        do {
+          const response = await getProducts({ page, per_page: 100, sort: 'name_asc' }, { signal: controller.signal });
+          const data = response.data.data;
+          products.push(...data.data.map(normalizeProduct));
+          lastPage = data.last_page;
+          page += 1;
+        } while (page <= lastPage && !controller.signal.aborted);
+        if (controller.signal.aborted) return;
+        // Some catalogue records repeat the same model under different IDs.
+        // Keep one stable record per brand and model name.
+        const uniqueProducts = [...new Map(
+          [...products].sort((a, b) => Number(b.id) - Number(a.id))
+            .map(product => [comparisonProductKey(product), product]),
+        ).values()].sort((a, b) => a.name.localeCompare(b.name));
+        setAllProducts(uniqueProducts);
+        const saved = readStoredArray('compareItems');
+        const restored = restoreComparison(saved, uniqueProducts);
+        setCompareItems(restored);
+        setCategory(restored[0]?.category || '');
+        if (!writeStoredArray('compareItems', restored)) {
+          setNotice('Your browser could not save this comparison. You can still compare products during this visit.');
+        } else if (restored.length !== saved.length) {
+          setNotice('Your saved comparison was updated to keep available products from one category.');
+        }
+      } catch {
+        if (!controller.signal.aborted) setError('Could not load the product catalogue. Please try again.');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+    void load();
+    return () => controller.abort();
+  }, [reloadKey]);
 
-  const loadCompareItems = () => {
-    setLoading(true);
-    const savedCompare = JSON.parse(localStorage.getItem('compareItems') || '[]');
-    setCompareItems(savedCompare);
-    setLoading(false);
+  const categories = [...new Set(allProducts.map(product => product.category).filter(Boolean))].sort();
+  const searchResults = allProducts.filter(product => product.category === category &&
+    `${product.name} ${product.brand}`.toLowerCase().includes(searchTerm.trim().toLowerCase()));
+  const changeCategory = (value) => {
+    if (compareItems.length) {
+      saveCompareItems([]);
+      setNotice('Comparison cleared for the new category. Choose products below.');
+    } else setNotice('');
+    setCategory(value);
+    setSearchTerm('');
+    setVisibleCount(8);
   };
 
   // Save compare items to localStorage
   const saveCompareItems = (items) => {
-    localStorage.setItem('compareItems', JSON.stringify(items));
     setCompareItems(items);
+    const saved = writeStoredArray('compareItems', items);
+    setNotice(saved ? '' : 'Your browser could not save this comparison. You can still compare products during this visit.');
   };
 
   // Add product to compare
   const handleAddToCompare = (product) => {
+    if (product.category !== category || compareItems.some(item => item.category !== product.category)) {
+      showToast('Choose products from the same category to compare.', 'warning');
+      return;
+    }
     if (compareItems.length >= 4) {
       showToast('You can compare up to 4 products', 'warning');
       return;
     }
     
-    if (compareItems.find(item => item.id === product.id)) {
+    if (compareItems.find(item => comparisonProductKey(item) === comparisonProductKey(product))) {
       showToast('Product already in comparison', 'info');
       return;
     }
@@ -154,8 +113,6 @@ export default function ComparePage() {
     const newCompare = [...compareItems, product];
     saveCompareItems(newCompare);
     showToast(`${product.name} added to comparison`, 'success');
-    setShowSearch(false);
-    setSearchTerm('');
   };
 
   // Remove product from compare
@@ -173,23 +130,18 @@ export default function ComparePage() {
 
   // Add to cart from compare
   const handleAddToCart = async (product) => {
+    if (!isAuthenticated) {
+      showToast('Sign in to add products to your cart.', 'info');
+      return;
+    }
     setAddingToCart(product.id);
-    addToCart(product, 1);
-    showToast(`${product.name} added to cart!`, 'success');
-    setAddingToCart(null);
-  };
-
-  // Search products
-  const handleSearch = (term) => {
-    setSearchTerm(term);
-    if (term.length > 1) {
-      const results = allProducts.filter(product =>
-        product.name.toLowerCase().includes(term.toLowerCase()) &&
-        !compareItems.find(item => item.id === product.id)
-      );
-      setSearchResults(results);
-    } else {
-      setSearchResults([]);
+    try {
+      const added = await addToCart(product, 1);
+      showToast(added ? `${product.name} added to cart` : 'Could not add to cart. Sign in and try again.', added ? 'success' : 'error');
+    } catch {
+      showToast('Could not add to cart. Please try again.', 'error');
+    } finally {
+      setAddingToCart(null);
     }
   };
 
@@ -208,6 +160,7 @@ export default function ComparePage() {
 
   const specKeys = getUniqueSpecKeys();
 
+
   return (
     <div className="compare-page">
       <div className="container">
@@ -219,99 +172,147 @@ export default function ComparePage() {
           ]}
         />
 
-        {/* Page Header */}
-        <div className="compare-header">
+        <header className="compare-header">
           <div>
-            <h1>Compare Products</h1>
-            <p>Compare specs, prices, and features side by side</p>
+            <p className="compare-eyebrow">Product comparison</p>
+            <h1>Compare products</h1>
+            <p>Price, availability and key specifications in one view.</p>
           </div>
-          {compareItems.length > 0 && (
-            <button onClick={handleClearAll} className="clear-compare-btn">
-              Clear All
-            </button>
-          )}
-        </div>
+          <div className="compare-header-actions">
+            <p className="compare-selection-count" aria-live="polite">
+              {compareItems.length} of 4 selected
+            </p>
+            {compareItems.length > 0 && (
+              <button type="button" className="clear-compare-btn" onClick={() => {
+                comparisonHeading.current?.focus({ preventScroll: true });
+                comparisonHeading.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+              }}>View comparison</button>
+            )}
+            {compareItems.length > 0 && (
+              <button type="button" onClick={handleClearAll} className="clear-compare-btn">
+                Clear comparison
+              </button>
+            )}
+          </div>
+        </header>
 
-        {/* Add Product Section */}
-        <div className="add-product-section">
-          <div className="search-wrapper">
-            <input
-              type="text"
-              placeholder="Search products to compare..."
-              value={searchTerm}
-              onChange={(e) => handleSearch(e.target.value)}
-              onFocus={() => setShowSearch(true)}
-            />
-            <button className="search-icon-btn">🔍</button>
+        <section className="compare-picker" aria-labelledby="compare-search-heading">
+          <div className="compare-search-heading">
+            <h2 id="compare-search-heading">Find products to compare</h2>
+            <p>Choose a category, then add up to four products to see their details side by side.</p>
           </div>
-          
-          {showSearch && searchResults.length > 0 && (
-            <div className="search-results">
-              {searchResults.map(product => (
-                <div key={product.id} className="search-result-item">
-                  <img src={product.image} alt={product.name} />
-                  <div className="result-info">
-                    <h4>{product.name}</h4>
-                    <p>${product.price}</p>
-                  </div>
-                  <button onClick={() => handleAddToCompare(product)}>
-                    Compare
-                  </button>
-                </div>
-              ))}
+          <search className="compare-filters" aria-label="Filter comparison products">
+            <div className="compare-field">
+              <label htmlFor="compare-category">Category</label>
+              <select id="compare-category" value={category} onChange={e => changeCategory(e.target.value)} disabled={loading || Boolean(error)}>
+                <option value="">Choose a category</option>
+                {categories.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
             </div>
-          )}
-        </div>
+            <div className="compare-field">
+              <label htmlFor="compare-product-search">Search in {category || 'your category'}</label>
+              <div className="search-wrapper">
+                <MagnifyingGlass size={20} aria-hidden="true" />
+                <input id="compare-product-search" type="search" placeholder={category ? 'Search by product or brand, e.g. Dell, ASUS, Mac' : 'Choose a category first'}
+                  value={searchTerm} disabled={!category || loading}
+                  onChange={e => { setSearchTerm(e.target.value); setVisibleCount(8); }} />
+              </div>
+            </div>
+          </search>
+          <p className="compare-picker-help">Only products in the same category can be compared. Changing category starts a new comparison.</p>
+          {notice && <p className="compare-notice" role="status">{notice}</p>}
+          {error && <div className="compare-notice" role="alert">{error} <button type="button" className="clear-compare-btn" onClick={() => setReloadKey(key => key + 1)}>Try again</button></div>}
+          {!loading && !error && !category && <p className="compare-picker-empty">Select a category above to browse products with photos and prices.</p>}
+          {!loading && !error && category && <>
+            <p className="compare-catalogue-count" role="status">{searchResults.length} {searchResults.length === 1 ? 'product' : 'products'} in {category}{searchTerm.trim() ? ` matching “${searchTerm.trim()}”` : ''}</p>
+            <div className="compare-catalogue">
+              {searchResults.slice(0, visibleCount).map(product => {
+                const selected = compareItems.some(item => item.id === product.id);
+                return <article className="compare-candidate" key={product.id}>
+                  <ProductImage product={product} />
+                  <div className="compare-candidate-info">
+                    <p className="compare-candidate-brand">{product.brand}</p>
+                    <h3><Link to={`/product/${product.id}`}>{product.name}</Link></h3>
+                    <p className="compare-candidate-price">{formatPrice(product.price)}</p>
+                  </div>
+                  <button type="button" className="compare-add-button" disabled={selected || compareItems.length >= 4}
+                    onClick={() => handleAddToCompare(product)} aria-label={`${selected ? 'Added' : 'Add to compare'}: ${product.name}`}>
+                    {selected ? 'Added to compare' : compareItems.length >= 4 ? 'Comparison full' : 'Add to compare'}
+                  </button>
+                </article>;
+              })}
+            </div>
+            {searchResults.length === 0 && <p className="compare-picker-empty">No products match “{searchTerm}” in {category}. Try another product or brand. <button type="button" className="clear-compare-btn" onClick={() => setSearchTerm('')}>Clear search</button></p>}
+            {searchResults.length > visibleCount && <button type="button" className="clear-compare-btn" onClick={() => setVisibleCount(count => count + 8)}>Show more products</button>}
+          </>}
+        </section>
 
         {/* Loading State */}
         {loading && (
-          <div className="compare-loading">
+          <div className="compare-loading" role="status">
+            <span>Loading product catalogue...</span>
             <div className="loader-spinner-premium loader-lg"></div>
           </div>
         )}
 
         {/* Empty State */}
         {!loading && compareItems.length === 0 && (
-          <div className="empty-compare">
-            <div className="empty-icon">🔄</div>
-            <h3>No products to compare</h3>
-            <p>Add products to see side-by-side comparison</p>
-            <Link to="/shop" className="btn-primary">Browse Products</Link>
-          </div>
+          <section className="empty-compare" aria-labelledby="compare-empty-heading">
+            <div className="empty-icon" aria-hidden="true"><Scales size={34} weight="duotone" /></div>
+            <div>
+              <h2 id="compare-empty-heading">Your comparison starts here.</h2>
+              <p>Choose a category above and click “Add to compare” on two or more products. Their photos, prices and specifications will appear here.</p>
+              <Link to="/shop" className="compare-browse-link">Browse products</Link>
+            </div>
+          </section>
         )}
 
         {/* Comparison Table */}
         {!loading && compareItems.length > 0 && (
-          <div className="compare-table-wrapper">
-            <table className="compare-table">
+          <section className="compare-results" aria-labelledby="comparison-heading">
+            <div className="compare-results-heading">
+              <div>
+                <p className="compare-eyebrow">Selected products</p>
+                <h2 ref={comparisonHeading} tabIndex={-1} id="comparison-heading">Product details</h2>
+              </div>
+              <p>{compareItems.length === 1 ? 'Add one more product from this category to compare.' : `${category} · ${compareItems.length} products selected`}</p>
+            </div>
+            <p className="compare-scroll-hint" id="compare-scroll-help">Swipe or scroll horizontally to view all products. Use the arrow keys when the table is focused.</p>
+            <div className="compare-table-wrapper" tabIndex="0" role="region" aria-labelledby="comparison-heading" aria-describedby="compare-scroll-help">
+            <table className={`compare-table compare-table--${compareItems.length}`}>
+              <caption className="visually-hidden">Comparison of selected products</caption>
               <thead>
                 <tr>
-                  <th className="spec-label">Product</th>
+                  <th className="spec-label" scope="col">Product</th>
                   {compareItems.map((item) => (
-                    <th key={item.id} className="product-cell">
+                    <th key={item.id} className="product-cell" scope="col">
                       <div className="product-header">
                         <button 
+                          type="button"
                           className="remove-product"
                           onClick={() => handleRemoveFromCompare(item.id, item.name)}
+                          aria-label={`Remove ${item.name} from comparison`}
                         >
-                          ✕
+                          <X size={16} weight="bold" aria-hidden="true" />
                         </button>
-                        <img src={item.image} alt={item.name} />
+                        <ProductImage product={item} />
                         <Link to={`/product/${item.id}`} className="product-name">
                           {item.name}
                         </Link>
                         <div className="product-price-compare">
-                          <span className="current">${item.price.toFixed(2)}</span>
+                          <span className="current">{formatPrice(item.price)}</span>
                           {item.originalPrice > item.price && (
-                            <span className="original">${item.originalPrice.toFixed(2)}</span>
+                            <span className="original">{formatPrice(item.originalPrice)}</span>
                           )}
                         </div>
                         <button 
+                          type="button"
                           className="add-to-cart-compare"
                           onClick={() => handleAddToCart(item)}
-                          disabled={addingToCart === item.id}
+                          disabled={addingToCart !== null || !item.inStock}
                         >
-                          {addingToCart === item.id ? 'Adding...' : 'Add to Cart'}
+                          <ShoppingCartSimple size={17} weight="regular" aria-hidden="true" />
+                          {!item.inStock ? 'Out of stock' : addingToCart === item.id ? 'Adding...' : 'Add to Cart'}
                         </button>
                       </div>
                     </th>
@@ -321,14 +322,14 @@ export default function ComparePage() {
               <tbody>
                 {/* Rating Row */}
                 <tr>
-                  <td className="spec-label">Rating</td>
+                  <th className="spec-label" scope="row">Rating</th>
                   {compareItems.map((item) => (
                     <td key={item.id} className="spec-value">
                       <div className="rating-compare">
                         <div className="stars">
                           {[...Array(5)].map((_, i) => (
                             <span key={i} className={i < Math.floor(item.rating || 0) ? 'star filled' : 'star'}>
-                              ★
+                              &#9733;
                             </span>
                           ))}
                         </div>
@@ -340,7 +341,7 @@ export default function ComparePage() {
 
                 {/* Brand Row */}
                 <tr>
-                  <td className="spec-label">Brand</td>
+                  <th className="spec-label" scope="row">Brand</th>
                   {compareItems.map((item) => (
                     <td key={item.id} className="spec-value">{item.brand || '-'}</td>
                   ))}
@@ -348,7 +349,7 @@ export default function ComparePage() {
 
                 {/* Category Row */}
                 <tr>
-                  <td className="spec-label">Category</td>
+                  <th className="spec-label" scope="row">Category</th>
                   {compareItems.map((item) => (
                     <td key={item.id} className="spec-value">{item.category || '-'}</td>
                   ))}
@@ -356,7 +357,7 @@ export default function ComparePage() {
 
                 {/* Stock Status Row */}
                 <tr>
-                  <td className="spec-label">Availability</td>
+                  <th className="spec-label" scope="row">Availability</th>
                   {compareItems.map((item) => (
                     <td key={item.id} className="spec-value">
                       {item.inStock !== false ? (
@@ -371,12 +372,12 @@ export default function ComparePage() {
                 {/* Dynamic Specs Rows */}
                 {specKeys.map((key) => (
                   <tr key={key}>
-                    <td className="spec-label">
+                    <th className="spec-label" scope="row">
                       {key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}
-                    </td>
+                    </th>
                     {compareItems.map((item) => (
                       <td key={item.id} className="spec-value">
-                        {item.specs?.[key] || '-'}
+                        {item.specs?.[key] ?? '-'}
                       </td>
                     ))}
                   </tr>
@@ -384,13 +385,13 @@ export default function ComparePage() {
 
                 {/* Features Row */}
                 <tr>
-                  <td className="spec-label">Features</td>
+                  <th className="spec-label" scope="row">Features</th>
                   {compareItems.map((item) => (
                     <td key={item.id} className="spec-value">
                       <ul className="features-list-compare">
                         {item.features?.map((feature, idx) => (
                           <li key={idx}>
-                            <span className="check-mark">✓</span>
+                            <CheckCircle className="check-mark" size={16} weight="fill" aria-hidden="true" />
                             {feature}
                           </li>
                         ))}
@@ -400,16 +401,47 @@ export default function ComparePage() {
                 </tr>
               </tbody>
             </table>
-          </div>
+            </div>
+          </section>
         )}
 
         {/* Add More Products Note */}
         {compareItems.length > 0 && compareItems.length < 4 && (
-          <div className="add-more-note">
-            <p>Add up to {4 - compareItems.length} more {4 - compareItems.length === 1 ? 'product' : 'products'} to compare</p>
-          </div>
+          <p className="add-more-note">
+            You can add {4 - compareItems.length} more {4 - compareItems.length === 1 ? 'product' : 'products'} to this comparison.
+          </p>
         )}
       </div>
     </div>
   );
 }
+
+
+function parseData(value, fallback) {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return parsed && typeof parsed === 'object' ? parsed : fallback;
+  } catch { return fallback; }
+}
+
+function normalizeProduct(product) {
+  const features = parseData(product.features, []);
+  const specs = parseData(product.specifications, {});
+  return { ...product, price: Number(product.price) || 0,
+    originalPrice: Number(product.original_price) || 0,
+    specs: Array.isArray(specs) ? {} : specs,
+    features: Array.isArray(features) ? features : [],
+    inStock: Number(product.stock) > 0 };
+}
+
+function formatPrice(value) {
+  return formatMoney(value);
+}
+
+function ProductImage({ product }) {
+  const [failed, setFailed] = useState(false);
+  return failed || !product.image ? (
+    <div className="compare-image-fallback"><Scales size={28} aria-hidden="true" /><span>Photo unavailable</span></div>
+  ) : <img className="compare-photo" src={product.image} alt={product.name} loading="lazy" onError={() => setFailed(true)} />;
+}
+

@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- context is shared with useCart */
-import { createContext, useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useEffect, useState, useRef } from 'react';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
@@ -9,17 +9,21 @@ export function CartProvider({ children }) {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const owner = isAuthenticated ? user.id : null;
   const [state, setState] = useState({ owner: null, items: [], total: 0, count: 0, error: '' });
+  const pending = useRef(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const fetchCart = useCallback(async (signal) => {
     if (!owner) return;
     try {
       const response = await api.get('/cart', { signal });
       if (!signal?.aborted) setState({ owner, ...response.data.data, error: '' });
+      return !signal?.aborted;
     } catch (error) {
       if (!signal?.aborted) {
-        setState({ owner, items: [], total: 0, count: 0, error: error.response?.data?.message || 'Could not load your cart.' });
+        setState(previous => ({ ...(previous.owner === owner ? previous : { items: [], total: 0, count: 0 }), owner, error: error.response?.data?.message || 'Could not load your cart.' }));
       }
     }
+    return false;
   }, [owner]);
 
   useEffect(() => {
@@ -29,16 +33,20 @@ export function CartProvider({ children }) {
   }, [owner, fetchCart]);
 
   const mutate = async request => {
-    if (!owner) return false;
+    if (!owner || pending.current) return false;
+    pending.current = true;
+    setIsUpdating(true);
     try {
       await request();
-      await fetchCart();
-      return true;
+      return await fetchCart();
     } catch (error) {
       setState(previous => ({
         ...previous, owner, error: error.response?.data?.message || 'Cart update failed. Please retry.',
       }));
       return false;
+    } finally {
+      pending.current = false;
+      setIsUpdating(false);
     }
   };
   const visible = owner && state.owner === owner;
@@ -49,6 +57,7 @@ export function CartProvider({ children }) {
     isLoading: authLoading || Boolean(owner && state.owner !== owner),
     error: visible ? state.error : '',
     fetchCart,
+    isUpdating,
     addToCart: (product, quantity = 1) => mutate(() => api.post('/cart', { product_id: product.id, quantity })),
     updateQuantity: (id, quantity) => mutate(() => api.put(`/cart/${id}`, { quantity })),
     removeFromCart: id => mutate(() => api.delete(`/cart/${id}`)),

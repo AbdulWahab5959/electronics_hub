@@ -13,7 +13,7 @@ class OrderController extends Controller
 {
     public function index(Request $request)
     {
-        return response()->json(['success' => true, 'data' => $request->user()->orders()->with('items.product')->latest()->get()]);
+        return response()->json(['success' => true, 'data' => $request->user()->orders()->with('items.product')->latest()->orderByDesc('id')->get()]);
     }
 
     public function show(Request $request, $id)
@@ -42,7 +42,12 @@ class OrderController extends Controller
             'shipping_address' => 'required|array:fullName,email,phone,address,apartment,city,state,zipCode,country',
             'shipping_address.fullName' => 'required|string|max:255',
             'shipping_address.email' => 'required|email|max:255',
-            'shipping_address.phone' => 'required|string|max:30',
+            'shipping_address.phone' => ['bail', 'required', 'string', 'max:30', function (string $attribute, mixed $value, \Closure $fail) {
+                $digits = preg_replace('/\D/', '', $value);
+                if (!preg_match('/^\+?[0-9\s().-]+$/', $value) || strlen($digits) < 7 || strlen($digits) > 15) {
+                    $fail('Enter a phone number with 7–15 digits.');
+                }
+            }],
             'shipping_address.address' => 'required|string|max:500',
             'shipping_address.apartment' => 'nullable|string|max:100',
             'shipping_address.city' => 'required|string|max:100',
@@ -98,7 +103,7 @@ class OrderController extends Controller
             $order->update(['status' => 'cancelled', 'payment_status' => 'cancelled']);
             return $order;
         }, 3);
-        return response()->json(['success' => true, 'data' => $order, 'message' => 'Order cancelled']);
+        return response()->json(['success' => true, 'data' => $order->load('items.product'), 'message' => 'Order cancelled']);
     }
 
     public function track(Request $request, $orderNumber)

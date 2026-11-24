@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart } from '@phosphor-icons/react/dist/csr/Heart';
 import { ShoppingCartSimple } from '@phosphor-icons/react/dist/csr/ShoppingCartSimple';
 import { Star } from '@phosphor-icons/react/dist/csr/Star';
 import { StarHalf } from '@phosphor-icons/react/dist/csr/StarHalf';
 import { formatMoney } from '../../utils/money';
+import { readStoredArray, writeStoredArray } from '../../utils/comparison';
+import { useToast } from './ToastNotification';
 
 export const ProductCard = ({
   id,
@@ -23,10 +25,16 @@ export const ProductCard = ({
   stock,
   onAddToCart,
 }) => {
+  const showToast = useToast();
   const [isWishlisted, setIsWishlisted] = useState(() => {
-    const wishlist = JSON.parse(localStorage.getItem('wishlist') || '[]');
+    const wishlist = readStoredArray('wishlist');
     return wishlist.some((item) => String(item.id) === String(id));
   });
+  useEffect(() => {
+    const refresh = () => setIsWishlisted(readStoredArray('wishlist').some(item => String(item.id) === String(id)));
+    window.addEventListener('wishlistUpdated', refresh); window.addEventListener('storage', refresh);
+    return () => { window.removeEventListener('wishlistUpdated', refresh); window.removeEventListener('storage', refresh); };
+  }, [id]);
 
   const numericPrice = Number(price) || 0;
   const numericOriginalPrice = Number(originalPrice ?? original_price) || 0;
@@ -47,6 +55,7 @@ export const ProductCard = ({
     const product = {
       id,
       name,
+      brand,
       price: numericPrice,
       originalPrice: numericOriginalPrice,
       image,
@@ -57,20 +66,22 @@ export const ProductCard = ({
       inStock: productInStock,
     };
 
-    const wishlist = JSON.parse(localStorage.getItem('wishlist') || '[]');
+    const wishlist = readStoredArray('wishlist');
     const exists = wishlist.some((item) => String(item.id) === String(id));
 
     let updatedWishlist;
 
     if (exists) {
-      updatedWishlist = wishlist.filter((item) => item.id !== id);
-      setIsWishlisted(false);
+      updatedWishlist = wishlist.filter((item) => String(item.id) !== String(id));
     } else {
       updatedWishlist = [...wishlist, product];
-      setIsWishlisted(true);
     }
 
-    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
+    if (!writeStoredArray('wishlist', updatedWishlist)) {
+      showToast('Your browser could not save your wishlist. Please try again.', 'error');
+      return;
+    }
+    setIsWishlisted(!exists);
 
     window.dispatchEvent(new Event('wishlistUpdated'));
   };

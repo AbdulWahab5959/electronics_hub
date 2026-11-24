@@ -1,385 +1,106 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/common/ToastNotification';
 import { Breadcrumb } from '../components/common/Breadcrumb';
-import {
-  getProfile,
-  updateProfile,
-  changePassword,
-  getAddresses,
-  createAddress,
-  updateAddress,
-  deleteAddress,
-  setDefaultAddress,
-  uploadAvatar, // assume you have this API function
-} from '../services/user';
+import { MapPin } from '@phosphor-icons/react/dist/csr/MapPin';
+import { PencilSimple } from '@phosphor-icons/react/dist/csr/PencilSimple';
+import { Plus } from '@phosphor-icons/react/dist/csr/Plus';
+import { ShieldCheck } from '@phosphor-icons/react/dist/csr/ShieldCheck';
+import { Trash } from '@phosphor-icons/react/dist/csr/Trash';
+import { UserCircle } from '@phosphor-icons/react/dist/csr/UserCircle';
+import { getProfile, updateProfile, changePassword, getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress, uploadAvatar } from '../services/user';
+
+const emptyAddress = { title: 'Home', address: '', city: '', state: '', zip_code: '', country: 'PK', is_default: false };
+const addressValues = (value = {}) => ({ title: value.title || 'Home', address: value.address || '', city: value.city || '', state: value.state || '', zip_code: value.zip_code || '', country: value.country || 'PK', is_default: Boolean(value.is_default) });
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
   const showToast = useToast();
   const fileInputRef = useRef(null);
-
   const [activeTab, setActiveTab] = useState('profile');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  // Profile form
-  const [profileData, setProfileData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    bio: '',
-  });
-
-  // Profile image
-  const [profileImage, setProfileImage] = useState(null);   // File object
-  const [imagePreview, setImagePreview] = useState(null);    // data URL or existing URL
-
-  // Password form
-  const [passwordData, setPasswordData] = useState({
-    current_password: '',
-    password: '',
-    password_confirmation: '',
-  });
-
-  // Addresses
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [profile, setProfile] = useState({ name: '', email: '', phone: '', bio: '' });
+  const [stats, setStats] = useState({ orders_count: 0, wishlist_count: 0 });
+  const [avatar, setAvatar] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [password, setPassword] = useState({ current_password: '', password: '', password_confirmation: '' });
   const [addresses, setAddresses] = useState([]);
-  const [showAddressForm, setShowAddressForm] = useState(false);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [addressForm, setAddressForm] = useState(emptyAddress);
   const [editingAddress, setEditingAddress] = useState(null);
-  const [addressForm, setAddressForm] = useState({
-    title: 'Home',
-    address: '',
-    city: '',
-    state: '',
-    zip_code: '',
-    country: 'PK',
-    is_default: false,
-  });
+  const [showAddressForm, setShowAddressForm] = useState(false);
 
-  // Order stats
-  const [orderStats, setOrderStats] = useState({
-    total: 0,
-    delivered: 0,
-    pending: 0,
-    totalSpent: 0,
-  });
-
-  useEffect(() => {
-    loadProfile();
-    loadAddresses();
-    loadOrderStats();
-  }, []);
-const loadProfile = async () => {
-  setIsLoading(true);
-  try {
+  const loadProfile = async () => {
     const response = await getProfile();
-    const userData = response.data.data.user;
-    setProfileData({
-      name: userData.name || '',
-      email: userData.email || '',
-      phone: userData.phone || '',
-      bio: userData.bio || '',
-    });
-    setImagePreview(userData.avatar_url || null); // use full URL
-  } catch (error) {
-    showToast('Failed to load profile', 'error');
-  } finally {
-    setIsLoading(false);
-  }
-};
-
+    const data = response.data?.data || {};
+    const nextUser = data.user || {};
+    setProfile({ name: nextUser.name || '', email: nextUser.email || '', phone: nextUser.phone || '', bio: nextUser.bio || '' });
+    setStats(data.stats || {});
+    setAvatarPreview(nextUser.avatar_url || null);
+  };
   const loadAddresses = async () => {
+    setAddressLoading(true);
+    try { const response = await getAddresses(); setAddresses(response.data?.data || []); }
+    finally { setAddressLoading(false); }
+  };
+  useEffect(() => {
+    let mounted = true;
+    (async () => { setLoading(true); try { await Promise.all([loadProfile(), loadAddresses()]); } catch (requestError) { if (mounted) setError(requestError.response?.data?.message || 'We could not load your profile.'); } finally { if (mounted) setLoading(false); } })();
+    return () => { mounted = false; };
+  }, []);
+
+  const submitProfile = async (event) => {
+    event.preventDefault(); setSaving(true);
     try {
-      const response = await getAddresses();
-      setAddresses(response.data.data);
-    } catch (error) {
-      console.error('Failed to load addresses', error);
-    }
+      if (avatar) { const formData = new FormData(); formData.append('avatar', avatar); const response = await uploadAvatar(formData); setAvatarPreview(response.data?.avatar_url || response.data?.data?.avatar_url || URL.createObjectURL(avatar)); setAvatar(null); }
+      const response = await updateProfile({ name: profile.name, phone: profile.phone, bio: profile.bio });
+      const nextUser = response.data?.data?.user || response.data?.data || {};
+      setProfile((current) => ({ ...current, name: nextUser.name || current.name, phone: nextUser.phone || '', bio: nextUser.bio || '' }));
+      showToast('Profile saved successfully.', 'success');
+    } catch (requestError) { showToast(requestError.response?.data?.message || 'Unable to save your profile.', 'error'); }
+    finally { setSaving(false); }
   };
-
-  const loadOrderStats = () => {
-    const orders = JSON.parse(localStorage.getItem('orders') || '[]');
-    const delivered = orders.filter(o => o.status === 'delivered');
-    const pending = orders.filter(o => o.status === 'pending' || o.status === 'processing');
-    setOrderStats({
-      total: orders.length,
-      delivered: delivered.length,
-      pending: pending.length,
-      totalSpent: delivered.reduce((sum, o) => sum + o.total, 0),
-    });
+  const submitPassword = async (event) => {
+    event.preventDefault();
+    if (password.password !== password.password_confirmation) { showToast('New passwords do not match.', 'error'); return; }
+    setSaving(true);
+    try { await changePassword(password); setPassword({ current_password: '', password: '', password_confirmation: '' }); showToast('Password updated successfully.', 'success'); }
+    catch (requestError) { showToast(requestError.response?.data?.message || 'Unable to update your password.', 'error'); }
+    finally { setSaving(false); }
   };
-
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setProfileImage(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
+  const submitAddress = async (event) => {
+    event.preventDefault(); setSaving(true);
+    try { const payload = addressValues(addressForm); if (editingAddress) await updateAddress(editingAddress.id, payload); else await createAddress(payload); await loadAddresses(); setAddressForm(emptyAddress); setEditingAddress(null); setShowAddressForm(false); showToast(editingAddress ? 'Address updated.' : 'Address added.', 'success'); }
+    catch (requestError) { showToast(requestError.response?.data?.message || 'Unable to save this address.', 'error'); }
+    finally { setSaving(false); }
   };
-
-  const handleProfileUpdate = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    try {
-      // 1. Upload avatar if new image selected
-      if (profileImage) {
-        const formData = new FormData();
-        formData.append('avatar', profileImage);
-        await uploadAvatar(formData);
-        // After upload, reload to get updated avatar URL
-        await loadProfile();
-        setProfileImage(null);
-        // Clear the file input
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
-      // 2. Update other profile fields
-      await updateProfile(profileData);
-      showToast('Profile updated successfully!', 'success');
-    } catch (error) {
-      showToast(error.response?.data?.message || 'Failed to update profile', 'error');
-    } finally {
-      setIsSaving(false);
-    }
+  const removeAddress = async (address) => {
+    if (!window.confirm(`Remove ${address.title || 'this address'}?`)) return;
+    try { await deleteAddress(address.id); await loadAddresses(); showToast('Address removed.', 'success'); }
+    catch (requestError) { showToast(requestError.response?.data?.message || 'Unable to remove this address.', 'error'); }
   };
-
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    if (passwordData.password !== passwordData.password_confirmation) {
-      showToast('New passwords do not match', 'error');
-      setIsSaving(false);
-      return;
-    }
-    try {
-      await changePassword(passwordData);
-      showToast('Password changed successfully!', 'success');
-      setPasswordData({
-        current_password: '',
-        password: '',
-        password_confirmation: '',
-      });
-    } catch (error) {
-      showToast(error.response?.data?.message || 'Failed to change password', 'error');
-    } finally {
-      setIsSaving(false);
-    }
+  const makeDefault = async (address) => {
+    try { await setDefaultAddress(address.id); await loadAddresses(); showToast('Default address updated.', 'success'); }
+    catch (requestError) { showToast(requestError.response?.data?.message || 'Unable to update the default address.', 'error'); }
   };
+  const tabs = [{ id: 'profile', label: 'Personal information', icon: UserCircle }, { id: 'security', label: 'Security', icon: ShieldCheck }, { id: 'addresses', label: 'Saved addresses', icon: MapPin }];
+  const avatarLetter = (profile.name || user?.name || 'U').charAt(0).toUpperCase();
 
-  const handleAddressSubmit = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    try {
-      if (editingAddress) {
-        await updateAddress(editingAddress.id, addressForm);
-        showToast('Address updated', 'success');
-      } else {
-        await createAddress(addressForm);
-        showToast('Address added', 'success');
-      }
-      await loadAddresses();
-      setShowAddressForm(false);
-      setEditingAddress(null);
-      setAddressForm({
-        title: 'Home',
-        address: '',
-        city: '',
-        state: '',
-        zip_code: '',
-        country: 'PK',
-        is_default: false,
-      });
-    } catch (error) {
-      showToast(error.response?.data?.message || 'Failed to save address', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDeleteAddress = async (id) => {
-    if (window.confirm('Delete this address?')) {
-      try {
-        await deleteAddress(id);
-        showToast('Address deleted', 'info');
-        await loadAddresses();
-      } catch (error) {
-        showToast('Failed to delete address', 'error');
-      }
-    }
-  };
-
-  const handleSetDefault = async (id) => {
-    try {
-      await setDefaultAddress(id);
-      showToast('Default address updated', 'success');
-      await loadAddresses();
-    } catch (error) {
-      showToast('Failed to set default', 'error');
-    }
-  };
-
-  const handleEditAddress = (address) => {
-    setEditingAddress(address);
-    setAddressForm(address);
-    setShowAddressForm(true);
-  };
-
-  const handleLogout = async () => {
-    const result = await logout();
-    if (!result.success) {
-      showToast(result.error, 'error');
-      return;
-    }
-    window.location.href = '/login';
-  };
-
-  return (
-    <div className="profile-page">
-      <div className="container">
-        <Breadcrumb items={[{ name: 'Home', path: '/' }, { name: 'Profile', path: '/profile' }]} />
-        <div className="profile-header">
-          <h1>My Profile</h1>
-          <p>Manage your account information</p>
-        </div>
-        <div className="profile-layout justifty-start">
-          <aside className="profile-sidebar">
-            <div className="profile-avatar">
-              {imagePreview ? (
-                <img
-                  src={imagePreview}
-                  alt="Profile"
-                  className="avatar-image"
-                  onError={() => setImagePreview(null)}
-                />
-              ) : (
-                <div className="avatar-circle">
-                  {profileData.name?.charAt(0)?.toUpperCase() || 'U'}
-                </div>
-              )}
-              <h3>{profileData.name || 'User'}</h3>
-              <p>{profileData.email}</p>
-            </div>
-            <nav className="profile-nav">
-              <button className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
-                <span className="nav-icon">👤</span> Personal Info
-              </button>
-              <button className={`nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
-                <span className="nav-icon">🔒</span> Security
-              </button>
-              <button className={`nav-item ${activeTab === 'addresses' ? 'active' : ''}`} onClick={() => setActiveTab('addresses')}>
-                <span className="nav-icon">📍</span> Addresses
-              </button>
-              <button className={`nav-item ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>
-                <span className="nav-icon">📊</span> Stats
-              </button>
-            </nav>
-            <button onClick={handleLogout} className="logout-btn">🚪 Logout</button>
-          </aside>
-
-          <main className="profile-content">
-            {activeTab === 'profile' && (
-              <div className="profile-card">
-                <h2>Personal Information</h2>
-                <form onSubmit={handleProfileUpdate} className="profile-form">
-                  <div className="form-group">
-                    <label>Profile Picture</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      ref={fileInputRef}
-                    />
-                    {imagePreview && (
-                      <div className="image-preview-thumb" style={{ marginTop: '0.5rem' }}>
-                        <img src={imagePreview} alt="Preview" width="80" style={{ borderRadius: '0.5rem' }} />
-                      </div>
-                    )}
-                    <small>Recommended: 300×300 pixels</small>
-                  </div>
-                  <div className="form-group">
-                    <label>Full Name</label>
-                    <input type="text" value={profileData.name} onChange={(e) => setProfileData({ ...profileData, name: e.target.value })} required />
-                  </div>
-                  <div className="form-group">
-                    <label>Email Address</label>
-                    <input type="email" value={profileData.email} disabled />
-                    <small>Email cannot be changed</small>
-                  </div>
-                  <div className="form-group">
-                    <label>Phone Number</label>
-                    <input type="tel" value={profileData.phone} onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })} placeholder="+92 300 1234567" />
-                  </div>
-                  <div className="form-group">
-                    <label>Bio (Optional)</label>
-                    <textarea rows="4" value={profileData.bio} onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })} placeholder="Tell us about yourself..." />
-                  </div>
-                  <button type="submit" className="save-btn" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Changes'}</button>
-                </form>
-              </div>
-            )}
-
-            {/* Security, Addresses, Stats tabs remain exactly the same as your original code */}
-            {activeTab === 'security' && (
-              <div className="profile-card">
-                <h2>Change Password</h2>
-                <form onSubmit={handlePasswordChange} className="profile-form">
-                  <div className="form-group">
-                    <label>Current Password</label>
-                    <input type="password" value={passwordData.current_password} onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })} required />
-                  </div>
-                  <div className="form-group">
-                    <label>New Password</label>
-                    <input type="password" value={passwordData.password} onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })} required minLength={8} />
-                  </div>
-                  <div className="form-group">
-                    <label>Confirm New Password</label>
-                    <input type="password" value={passwordData.password_confirmation} onChange={(e) => setPasswordData({ ...passwordData, password_confirmation: e.target.value })} required />
-                  </div>
-                  <button type="submit" className="save-btn" disabled={isSaving}>{isSaving ? 'Updating...' : 'Update Password'}</button>
-                </form>
-              </div>
-            )}
-
-            {activeTab === 'addresses' && (
-              <div className="profile-card">
-                <div className="addresses-header">
-                  <h2>Saved Addresses</h2>
-                  <button className="add-address-btn" onClick={() => { setEditingAddress(null); setAddressForm({ title: 'Home', address: '', city: '', state: '', zip_code: '', country: 'PK', is_default: false }); setShowAddressForm(true); }}>+ Add New Address</button>
-                </div>
-                {showAddressForm && (
-                  <div className="address-form-card">
-                    <h3>{editingAddress ? 'Edit Address' : 'New Address'}</h3>
-                    <form onSubmit={handleAddressSubmit}>
-                      <div className="form-row"><div className="form-group"><label>Address Title</label><select value={addressForm.title} onChange={(e) => setAddressForm({ ...addressForm, title: e.target.value })}><option>Home</option><option>Work</option><option>Other</option></select></div></div>
-                      <div className="form-group"><label>Street Address</label><input type="text" value={addressForm.address} onChange={(e) => setAddressForm({ ...addressForm, address: e.target.value })} required /></div>
-                      <div className="form-row"><div className="form-group"><label>City</label><input type="text" value={addressForm.city} onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} required /></div><div className="form-group"><label>State/Province</label><input type="text" value={addressForm.state} onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })} required /></div></div>
-                      <div className="form-row"><div className="form-group"><label>ZIP Code</label><input type="text" value={addressForm.zip_code} onChange={(e) => setAddressForm({ ...addressForm, zip_code: e.target.value })} required /></div><div className="form-group"><label>Country</label><select value={addressForm.country} onChange={(e) => setAddressForm({ ...addressForm, country: e.target.value })}><option value="PK">Pakistan</option><option value="US">United States</option><option value="UK">United Kingdom</option><option value="CA">Canada</option><option value="AU">Australia</option></select></div></div>
-                      <label className="checkbox-label"><input type="checkbox" checked={addressForm.is_default} onChange={(e) => setAddressForm({ ...addressForm, is_default: e.target.checked })} /> Set as default address</label>
-                      <div className="form-actions"><button type="submit" className="save-btn" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Address'}</button><button type="button" className="cancel-btn" onClick={() => { setShowAddressForm(false); setEditingAddress(null); }}>Cancel</button></div>
-                    </form>
-                  </div>
-                )}
-                <div className="addresses-list">
-                  {addresses.length === 0 ? (<div className="empty-addresses"><p>No saved addresses yet.</p><button className="add-address-btn" onClick={() => setShowAddressForm(true)}>Add Your First Address</button></div>) : (addresses.map((addr) => (<div key={addr.id} className="address-card"><div className="address-header"><h4>{addr.title}{addr.is_default && <span className="default-badge">Default</span>}</h4><div className="address-actions"><button onClick={() => handleEditAddress(addr)}>Edit</button><button onClick={() => handleDeleteAddress(addr.id)}>Delete</button>{!addr.is_default && <button onClick={() => handleSetDefault(addr.id)}>Set Default</button>}</div></div><div className="address-details"><p>{addr.address}</p><p>{addr.city}, {addr.state} {addr.zip_code}</p><p>{addr.country === 'PK' ? 'Pakistan' : addr.country}</p></div></div>)))}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'stats' && (
-              <div className="profile-card">
-                <h2>Your Activity</h2>
-                <div className="stats-grid">
-                  <div className="stat-item"><div className="stat-number">{orderStats.total}</div><div className="stat-label">Total Orders</div></div>
-                  <div className="stat-item"><div className="stat-number">{orderStats.delivered}</div><div className="stat-label">Delivered</div></div>
-                  <div className="stat-item"><div className="stat-number">{orderStats.pending}</div><div className="stat-label">In Progress</div></div>
-                  <div className="stat-item"><div className="stat-number">${orderStats.totalSpent.toFixed(2)}</div><div className="stat-label">Total Spent</div></div>
-                </div>
-                <div className="quick-actions"><h3>Quick Actions</h3><div className="action-links"><Link to="/orders" className="action-link"><span>📦</span> View Orders</Link><Link to="/wishlist" className="action-link"><span>❤️</span> Wishlist</Link><Link to="/shop" className="action-link"><span>🛍️</span> Continue Shopping</Link></div></div>
-              </div>
-            )}
-          </main>
-        </div>
-      </div>
+  return <div className="account-profile-page">
+    <Breadcrumb items={[{ label: 'Home', path: '/' }, { label: 'Profile' }]} />
+    <div className="account-profile-shell">
+      <header className="profile-page-heading"><div><p className="account-eyebrow">ACCOUNT SETTINGS</p><h1>Profile</h1><p>Manage your details, password, and delivery addresses in one place.</p></div><button type="button" className="account-button account-secondary profile-logout" onClick={logout}>Sign out</button></header>
+      {error && <div className="profile-alert" role="alert">{error}<button type="button" className="account-text-button" onClick={() => window.location.reload()}>Try again</button></div>}
+      {loading ? <div className="profile-loading" role="status">Loading your profile…</div> : <div className="profile-layout">
+        <aside className="profile-rail"><div className="profile-identity"><div className="profile-avatar">{avatarPreview ? <img src={avatarPreview} alt="" /> : avatarLetter}</div><div><strong>{profile.name || user?.name || 'Your profile'}</strong><span>{profile.email || user?.email || ''}</span></div></div><nav className="profile-tabs" aria-label="Profile sections" role="tablist">{tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" role="tab" aria-selected={activeTab === id} className={activeTab === id ? 'is-active' : ''} onClick={() => setActiveTab(id)}><Icon size={19} aria-hidden="true" />{label}</button>)}</nav><div className="profile-rail-note"><span>Account summary</span><strong>{stats.orders_count || 0} orders</strong><small>{stats.wishlist_count || 0} wishlist items</small></div></aside>
+        <main className="profile-content">
+          {activeTab === 'profile' && <section aria-labelledby="profile-details-title"><div className="profile-section-heading"><div><p className="account-eyebrow">YOUR DETAILS</p><h2 id="profile-details-title">Personal information</h2><p>Keep your contact details current for order updates.</p></div></div><form className="profile-form" onSubmit={submitProfile}><fieldset><legend className="visually-hidden">Personal information</legend><div className="profile-avatar-field"><div className="profile-avatar profile-avatar-large">{avatarPreview ? <img src={avatarPreview} alt="Current profile" /> : avatarLetter}</div><div><button type="button" className="account-button account-secondary" onClick={() => fileInputRef.current?.click()}>Change photo</button><input ref={fileInputRef} type="file" name="avatar" accept="image/*" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) { setAvatar(file); setAvatarPreview(URL.createObjectURL(file)); } }} /><small>JPG or PNG, up to 2 MB.</small></div></div><div className="profile-form-grid"><label htmlFor="profile-name">Full name<input id="profile-name" name="name" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} autoComplete="name" required maxLength={255} /></label><label htmlFor="profile-email">Email address<input id="profile-email" name="email" value={profile.email} readOnly disabled autoComplete="email" /><small>Email is managed by your account.</small></label><label htmlFor="profile-phone">Phone number<input id="profile-phone" name="phone" value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} autoComplete="tel" inputMode="tel" /></label><label htmlFor="profile-bio" className="profile-span-2">About you<textarea id="profile-bio" name="bio" value={profile.bio} onChange={(event) => setProfile({ ...profile, bio: event.target.value })} maxLength={500} rows={4} /></label></div></fieldset><div className="profile-form-actions"><button className="account-button" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div></form></section>}
+          {activeTab === 'security' && <section aria-labelledby="profile-security-title"><div className="profile-section-heading"><div><p className="account-eyebrow">SECURITY</p><h2 id="profile-security-title">Password and sign-in</h2><p>Use a strong password you do not reuse elsewhere.</p></div></div><form className="profile-form" onSubmit={submitPassword}><fieldset><legend className="visually-hidden">Change password</legend><div className="profile-form-grid"><label htmlFor="current-password">Current password<input id="current-password" name="current_password" type="password" value={password.current_password} onChange={(event) => setPassword({ ...password, current_password: event.target.value })} autoComplete="current-password" required /></label><span /><label htmlFor="new-password">New password<input id="new-password" name="password" type="password" minLength={8} value={password.password} onChange={(event) => setPassword({ ...password, password: event.target.value })} autoComplete="new-password" required /></label><label htmlFor="confirm-password">Confirm new password<input id="confirm-password" name="password_confirmation" type="password" minLength={8} value={password.password_confirmation} onChange={(event) => setPassword({ ...password, password_confirmation: event.target.value })} autoComplete="new-password" required /></label></div></fieldset><div className="profile-form-actions"><button className="account-button" type="submit" disabled={saving}>{saving ? 'Updating…' : 'Update password'}</button></div></form></section>}
+          {activeTab === 'addresses' && <section aria-labelledby="profile-addresses-title"><div className="profile-section-heading"><div><p className="account-eyebrow">DELIVERY</p><h2 id="profile-addresses-title">Saved addresses</h2><p>Choose a default address to speed up checkout.</p></div><button type="button" className="account-button" onClick={() => { setEditingAddress(null); setAddressForm(emptyAddress); setShowAddressForm(true); }}><Plus size={18} aria-hidden="true" />Add address</button></div>{showAddressForm && <form className="profile-form profile-address-form" onSubmit={submitAddress}><fieldset><legend>{editingAddress ? 'Edit address' : 'Add address'}</legend><div className="profile-form-grid"><label htmlFor="address-title">Label<input id="address-title" name="title" value={addressForm.title} onChange={(event) => setAddressForm({ ...addressForm, title: event.target.value })} required /></label><label htmlFor="address-country">Country<input id="address-country" name="country" value={addressForm.country} onChange={(event) => setAddressForm({ ...addressForm, country: event.target.value })} autoComplete="country" required /></label><label htmlFor="address-line" className="profile-span-2">Street address<input id="address-line" name="address" value={addressForm.address} onChange={(event) => setAddressForm({ ...addressForm, address: event.target.value })} autoComplete="street-address" required /></label><label htmlFor="address-city">City<input id="address-city" name="city" value={addressForm.city} onChange={(event) => setAddressForm({ ...addressForm, city: event.target.value })} autoComplete="address-level2" required /></label><label htmlFor="address-state">Province / state<input id="address-state" name="state" value={addressForm.state} onChange={(event) => setAddressForm({ ...addressForm, state: event.target.value })} autoComplete="address-level1" required /></label><label htmlFor="address-zip">Postal code<input id="address-zip" name="zip_code" value={addressForm.zip_code} onChange={(event) => setAddressForm({ ...addressForm, zip_code: event.target.value })} autoComplete="postal-code" inputMode="numeric" required /></label></div><label className="profile-checkbox"><input type="checkbox" name="is_default" checked={addressForm.is_default} onChange={(event) => setAddressForm({ ...addressForm, is_default: event.target.checked })} />Make this my default address</label></fieldset><div className="profile-form-actions"><button type="submit" className="account-button" disabled={saving}>{saving ? 'Saving…' : editingAddress ? 'Save address' : 'Add address'}</button><button type="button" className="account-button account-secondary" onClick={() => { setShowAddressForm(false); setEditingAddress(null); }}>Cancel</button></div></form>}{addressLoading ? <div className="profile-loading" role="status">Loading addresses…</div> : addresses.length === 0 ? <div className="profile-empty"><MapPin size={26} aria-hidden="true" /><h3>No saved addresses yet</h3><p>Add one to make checkout faster.</p></div> : <div className="address-grid">{addresses.map((address) => <article className="address-card" key={address.id}><header><div><span className="address-label">{address.title || 'Address'}</span>{address.is_default && <span className="address-default">Default</span>}</div><MapPin size={21} aria-hidden="true" /></header><p>{address.address}<br />{address.city}, {address.state} {address.zip_code}<br />{address.country}</p><footer><button type="button" className="account-button account-secondary" onClick={() => { setEditingAddress(address); setAddressForm(addressValues(address)); setShowAddressForm(true); }}><PencilSimple size={17} aria-hidden="true" />Edit</button><button type="button" className="account-button account-danger" onClick={() => removeAddress(address)}><Trash size={17} aria-hidden="true" />Remove</button>{!address.is_default && <button type="button" className="account-text-button" onClick={() => makeDefault(address)}>Make default</button>}</footer></article>)}</div>}</section>}
+        </main>
+      </div>}
     </div>
-  );
+  </div>;
 }

@@ -2,8 +2,8 @@
 import api from './api';
 
 // Get all products with filters, sorting, pagination
-export const getProducts = (params = {}) => {
-  return api.get('/products', { params });
+export const getProducts = (params = {}, config = {}) => {
+  return api.get('/products', { ...config, params });
 };
 
 // Get single product by ID

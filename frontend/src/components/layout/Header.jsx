@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ArrowsLeftRight } from '@phosphor-icons/react/dist/csr/ArrowsLeftRight';
-import { CaretDown } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { Headset } from '@phosphor-icons/react/dist/csr/Headset';
 import { Heart } from '@phosphor-icons/react/dist/csr/Heart';
 import { List } from '@phosphor-icons/react/dist/csr/List';
 import { Receipt } from '@phosphor-icons/react/dist/csr/Receipt';
+import { Scales } from '@phosphor-icons/react/dist/csr/Scales';
 import { ShoppingCartSimple } from '@phosphor-icons/react/dist/csr/ShoppingCartSimple';
 import { SignOut } from '@phosphor-icons/react/dist/csr/SignOut';
 import { Storefront } from '@phosphor-icons/react/dist/csr/Storefront';
@@ -66,7 +65,7 @@ export const Header = ({ products = [] }) => {
 
   const mobileLinks = [
     { name: 'Shop', path: '/shop', Icon: Storefront },
-    { name: 'Compare products', path: '/compare', Icon: ArrowsLeftRight },
+    { name: 'Compare products', path: '/compare', Icon: Scales },
     { name: 'Wishlist', path: '/wishlist', Icon: Heart },
     { name: 'Cart', path: '/cart', Icon: ShoppingCartSimple },
     { name: 'Contact us', path: '/contact', Icon: Headset },
@@ -135,7 +134,6 @@ export const Header = ({ products = [] }) => {
                       {user?.name?.charAt(0).toUpperCase()}
                     </span>
                     <span className="user-name">{user?.name?.split(' ')[0]}</span>
-                    <CaretDown size={16} weight="regular" aria-hidden="true" />
                   </button>
                   <div className="user-dropdown">
                     <Link to="/profile">Profile</Link>

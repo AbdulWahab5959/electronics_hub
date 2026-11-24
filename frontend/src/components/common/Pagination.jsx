@@ -1,7 +1,4 @@
 // src/components/common/Pagination.jsx
-import React, { useState, useEffect } from 'react';
-import { CaretLeft } from '@phosphor-icons/react/dist/csr/CaretLeft';
-import { CaretRight } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { Plus } from '@phosphor-icons/react/dist/csr/Plus';
 
 export const Pagination = ({
@@ -16,20 +13,9 @@ export const Pagination = ({
   onItemsPerPageChange,
   className = ''
 }) => {
-  const [page, setPage] = useState(currentPage);
-  const [perPage, setPerPage] = useState(itemsPerPage);
-  
-  // Calculate total pages
-  const totalPages = Math.ceil(totalItems / perPage);
-  
-  // Sync with external prop changes
-  useEffect(() => {
-    setPage(currentPage);
-  }, [currentPage]);
-  
-  useEffect(() => {
-    setPerPage(itemsPerPage);
-  }, [itemsPerPage]);
+  const page = currentPage;
+  const perPage = itemsPerPage;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
 
   // Generate page range with ellipsis
   const generatePaginationRange = () => {
@@ -76,7 +62,6 @@ export const Pagination = ({
   // Handle page change
   const handlePageChange = (newPage) => {
     if (newPage < 1 || newPage > totalPages || newPage === page) return;
-    setPage(newPage);
     onPageChange?.(newPage);
     
     // Scroll to top
@@ -85,10 +70,8 @@ export const Pagination = ({
   
   // Handle items per page change
   const handleItemsPerPageChange = (newPerPage) => {
-    setPerPage(newPerPage);
-    setPage(1);
-    onItemsPerPageChange?.(newPerPage);
-    onPageChange?.(1);
+    if (onItemsPerPageChange) onItemsPerPageChange(newPerPage);
+    else onPageChange?.(1);
   };
 
   // Calculate range display
@@ -96,12 +79,12 @@ export const Pagination = ({
   const endItem = Math.min(page * perPage, totalItems);
 
   // Don't show pagination if only one page
-  if (totalPages <= 1 && totalItems <= perPage) {
+  if (totalPages <= 1 && !showItemsPerPage) {
     return null;
   }
 
   return (
-    <div className={`pagination-premium ${className}`}>
+    <div className={`pagination-premium ${className}`} role="navigation" aria-label="Product pages">
       <div className="pagination-container">
         {/* Items Per Page Selector */}
         {showItemsPerPage && (
@@ -111,6 +94,7 @@ export const Pagination = ({
               value={perPage}
               onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
               className="per-page-select"
+              aria-label="Products per page"
             >
               {itemsPerPageOptions.map(option => (
                 <option key={option} value={option}>
@@ -138,7 +122,6 @@ export const Pagination = ({
             disabled={page === 1}
             aria-label="Previous page"
           >
-            <CaretLeft size={18} weight="regular" aria-hidden="true" />
             <span>Previous</span>
           </button>
           
@@ -175,7 +158,6 @@ export const Pagination = ({
             aria-label="Next page"
           >
             <span>Next</span>
-            <CaretRight size={18} weight="regular" aria-hidden="true" />
           </button>
         </div>
       </div>

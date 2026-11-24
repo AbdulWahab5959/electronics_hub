@@ -131,9 +131,12 @@ a:hover {
 }
 
 .input:focus {
-  outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+:is(input, textarea, select):focus {
+  outline: revert !important;
+  box-shadow: revert !important;
 }
 
 .input-error {

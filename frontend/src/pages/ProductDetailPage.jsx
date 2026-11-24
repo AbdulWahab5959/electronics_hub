@@ -8,6 +8,9 @@ import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';   // ✅ added
 import { useToast } from '../components/common/ToastNotification';
 import { getProduct } from '../services/product';
+import { formatMoney } from '../utils/money';
+import { Heart } from '@phosphor-icons/react/dist/csr/Heart';
+import { readStoredArray, writeStoredArray } from '../utils/comparison';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -16,7 +19,7 @@ export default function ProductDetailPage() {
 
 function ProductDetail({ id }) {
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+  const { addToCart, isUpdating } = useCart();
   const { isAuthenticated } = useAuth();   // ✅ authentication status
   const showToast = useToast();
 
@@ -27,6 +30,20 @@ function ProductDetail({ id }) {
   const [adding, setAdding] = useState(false);
   const [activeTab, setActiveTab] = useState('description');
   const [relatedProducts, setRelatedProducts] = useState([]);
+  const [saved, setSaved] = useState(() => readStoredArray('wishlist').some(item => String(item.id) === String(id)));
+  useEffect(() => {
+    const refresh = () => setSaved(readStoredArray('wishlist').some(item => String(item.id) === String(id)));
+    window.addEventListener('wishlistUpdated', refresh); window.addEventListener('storage', refresh);
+    return () => { window.removeEventListener('wishlistUpdated', refresh); window.removeEventListener('storage', refresh); };
+  }, [id]);
+  function toggleSaved() {
+    const current = readStoredArray('wishlist');
+    const exists = current.some(item => String(item.id) === String(id));
+    const next = exists ? current.filter(item => String(item.id) !== String(id)) : [...current, { id: product.id, name: product.name, image: product.image }];
+    if (!writeStoredArray('wishlist', next)) { showToast('Your browser could not save your wishlist. Please retry.', 'error'); return; }
+    setSaved(!exists); window.dispatchEvent(new Event('wishlistUpdated'));
+    showToast(exists ? 'Removed from wishlist.' : 'Saved to your wishlist.', 'info');
+  }
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -59,10 +76,12 @@ function ProductDetail({ id }) {
         productData.features = [];
       }
 
+      productData.features = Array.isArray(productData.features) ? productData.features.filter(feature => typeof feature === 'string') : [];
+      productData.specifications = productData.specifications && typeof productData.specifications === 'object' && !Array.isArray(productData.specifications) ? productData.specifications : {};
       setProduct(productData);
       setRelatedProducts(related_products || []);
     } catch (error) {
-      if (!controller.signal.aborted) setError(error.response?.data?.message || 'Could not load this product.');
+      if (!controller.signal.aborted) setError(error.response?.status === 404 ? 'Product not found' : 'Could not load this product. Please try again.');
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
@@ -75,7 +94,7 @@ function ProductDetail({ id }) {
     if (adding) return;
     if (!isAuthenticated) {
       showToast('Please log in to add items to your cart.', 'info');
-      navigate('/login');
+      navigate('/login', { state: { from: `/product/${id}` } });
       return;
     }
     if (product && product.stock > 0) {
@@ -90,7 +109,7 @@ function ProductDetail({ id }) {
     if (adding) return;
     if (!isAuthenticated) {
       showToast('Please log in to proceed.', 'info');
-      navigate('/login');
+      navigate('/login', { state: { from: `/product/${id}` } });
       return;
     }
     if (product && product.stock > 0) {
@@ -105,7 +124,7 @@ function ProductDetail({ id }) {
   // Loading state
   if (loading) {
     return (
-      <div className="product-detail-loading">
+      <div className="product-detail-loading" role="status" aria-label="Loading product details">
         <div className="container">
           <div className="loading-skeleton">
             <div className="skeleton-gallery shimmer"></div>
@@ -122,7 +141,7 @@ function ProductDetail({ id }) {
       <div className="product-not-found">
         <div className="container">
           <h2>{error || 'Product Not Found'}</h2>
-          <p>The product you're looking for doesn't exist or has been removed.</p>
+          <p>Browse the shop for available products, or try loading this page again.</p>
           <Link to="/shop" className="btn-primary">Continue Shopping</Link>
         </div>
       </div>
@@ -136,7 +155,7 @@ function ProductDetail({ id }) {
           items={[
             { name: 'Home', path: '/' },
             { name: 'Shop', path: '/shop' },
-            { name: product.category || 'Category', path: `/shop?category=${product.category}` },
+            { name: product.category || 'Category', path: `/shop?category=${encodeURIComponent(product.category)}` },
             { name: product.name }
           ]}
         />
@@ -147,9 +166,9 @@ function ProductDetail({ id }) {
           <div className="product-gallery">
             <div className="main-image">
               <img
-                src={product.image || 'https://placehold.co/600x600?text=No+Image'}
+                src={product.image || '/product-placeholder.svg'}
                 alt={product.name}
-                onError={(e) => { e.target.src = 'https://placehold.co/600x600?text=No+Image'; }}
+                onError={(e) => { e.target.onerror = null; e.target.src = '/product-placeholder.svg'; }}
               />
               {product.discount > 0 && (
                 <div className="discount-badge">-{product.discount}%</div>
@@ -165,19 +184,19 @@ function ProductDetail({ id }) {
             <div className="product-rating-section">
               <RatingStars rating={product.rating || 0} totalReviews={product.reviews || 0} />
               <span className="review-link">
-                <a href="#reviews">See all {(product.reviews || 0).toLocaleString()} reviews</a>
+                <button type="button" onClick={() => { setActiveTab('reviews'); document.getElementById('product-information')?.scrollIntoView({ behavior: 'instant', block: 'start' }); }}>Rating summary</button>
               </span>
             </div>
 
             <div className="product-price-section">
-              {product.original_price > product.price ? (
+              {Number(product.original_price) > Number(product.price) ? (
                 <>
-                  <span className="price-current">${parseFloat(product.price).toFixed(2)}</span>
-                  <span className="price-original">${parseFloat(product.original_price).toFixed(2)}</span>
-                  <span className="price-saved">Save ${(parseFloat(product.original_price) - parseFloat(product.price)).toFixed(2)}</span>
+                  <span className="price-current">{formatMoney(product.price)}</span>
+                  <span className="price-original">{formatMoney(product.original_price)}</span>
+                  <span className="price-saved">Save {formatMoney(Number(product.original_price) - Number(product.price))}</span>
                 </>
               ) : (
-                <span className="price-current">${parseFloat(product.price).toFixed(2)}</span>
+                <span className="price-current">{formatMoney(product.price)}</span>
               )}
             </div>
 
@@ -202,11 +221,12 @@ function ProductDetail({ id }) {
             {/* Quantity & Add to Cart */}
             <div className="product-actions">
               <div className="quantity-wrapper">
-                <label>Quantity:</label>
                 <QuantitySelector
                   initialQuantity={1}
                   min={1}
-                  max={product.stock || 10}
+                  max={Math.max(1, Math.min(Number(product.stock), 99))}
+                  disabled={product.stock <= 0 || adding || isUpdating}
+                  showLabel
                   onChange={setQuantity}
                   size="lg"
                 />
@@ -216,24 +236,25 @@ function ProductDetail({ id }) {
                 <button 
                   className="add-to-cart-btn-detail"
                   onClick={handleAddToCart}
-                  disabled={product.stock <= 0 || adding}
+                  disabled={product.stock <= 0 || adding || isUpdating}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="9" cy="21" r="1"/>
                     <circle cx="20" cy="21" r="1"/>
                     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                   </svg>
-                  Add to Cart
+                  {adding ? 'Adding…' : product.stock > 0 ? 'Add to cart' : 'Out of stock'}
                 </button>
                 
                 <button 
                   className="buy-now-btn"
                   onClick={handleBuyNow}
-                  disabled={product.stock <= 0 || adding}
+                  disabled={product.stock <= 0 || adding || isUpdating}
                 >
-                  Buy Now
+                  Add and view cart
                 </button>
               </div>
+              <button type="button" className="commerce-save" aria-pressed={saved} onClick={toggleSaved}><Heart size={19} weight={saved ? 'fill' : 'regular'} aria-hidden="true" />{saved ? 'Saved to wishlist' : 'Save to wishlist'}</button>
             </div>
 
             {/* Shipping Info */}
@@ -245,31 +266,31 @@ function ProductDetail({ id }) {
                   <circle cx="5.5" cy="18.5" r="2.5"/>
                   <circle cx="18.5" cy="18.5" r="2.5"/>
                 </svg>
-                <span>Free shipping on orders over $100</span>
+                <span>Shipping and taxes confirmed at checkout</span>
               </div>
               <div className="shipping-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                 </svg>
-                <span>24-month warranty included</span>
+                <span>Stock checked again when you add to cart</span>
               </div>
               <div className="shipping-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
-                <span>Secure payment & 30-day returns</span>
+                <span>Questions? <Link to="/contact">Contact our team</Link> before ordering</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Product Tabs */}
-        <div className="product-tabs">
+        <div className="product-tabs" id="product-information">
           <div className="tabs-header">
-            <button className={`tab-btn ${activeTab === 'description' ? 'active' : ''}`} onClick={() => setActiveTab('description')}>Description</button>
-            <button className={`tab-btn ${activeTab === 'specifications' ? 'active' : ''}`} onClick={() => setActiveTab('specifications')}>Specifications</button>
-            <button className={`tab-btn ${activeTab === 'features' ? 'active' : ''}`} onClick={() => setActiveTab('features')}>Features</button>
-            <button className={`tab-btn ${activeTab === 'reviews' ? 'active' : ''}`} onClick={() => setActiveTab('reviews')}>Reviews ({(product.reviews || 0).toLocaleString()})</button>
+            <button type="button" aria-pressed={activeTab === 'description'} className={`tab-btn ${activeTab === 'description' ? 'active' : ''}`} onClick={() => setActiveTab('description')}>Description</button>
+            <button type="button" aria-pressed={activeTab === 'specifications'} className={`tab-btn ${activeTab === 'specifications' ? 'active' : ''}`} onClick={() => setActiveTab('specifications')}>Specifications</button>
+            <button type="button" aria-pressed={activeTab === 'features'} className={`tab-btn ${activeTab === 'features' ? 'active' : ''}`} onClick={() => setActiveTab('features')}>Features</button>
+            <button type="button" aria-pressed={activeTab === 'reviews'} className={`tab-btn ${activeTab === 'reviews' ? 'active' : ''}`} onClick={() => setActiveTab('reviews')}>Reviews ({(product.reviews || 0).toLocaleString()})</button>
           </div>
 
           <div className="tabs-content">
@@ -282,12 +303,12 @@ function ProductDetail({ id }) {
             {activeTab === 'specifications' && (
               <div className="tab-specifications">
                 {product.specifications && Object.keys(product.specifications).length > 0 ? (
-                  <table className="specs-table">
+                  <table className="specs-table" aria-label="Product specifications">
                     <tbody>
                       {Object.entries(product.specifications).map(([key, value]) => (
                         <tr key={key}>
-                          <td className="spec-label">{key.charAt(0).toUpperCase() + key.slice(1)}</td>
-                          <td className="spec-value">{value}</td>
+                          <th scope="row" className="spec-label">{key.replaceAll('_', ' ').replace(/^./, c => c.toUpperCase())}</th>
+                          <td className="spec-value">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -327,7 +348,7 @@ function ProductDetail({ id }) {
                   </div>
                 </div>
                 <div className="review-form-prompt">
-                  <p>Have you used this product? <Link to="/login">Log in</Link> to leave a review.</p>
+                  <p>Customer rating summary. Written reviews are not available on this page.</p>
                 </div>
               </div>
             )}
@@ -343,6 +364,8 @@ function ProductDetail({ id }) {
                 <ProductCard
                   key={product.id}
                   id={product.id}
+                  brand={product.brand}
+                  stock={product.stock}
                   name={product.name}
                   price={product.price}
                   originalPrice={product.original_price}
@@ -352,14 +375,14 @@ function ProductDetail({ id }) {
                   discount={product.discount}
                   isNew={product.is_new}
                   isFeatured={product.is_featured}
-                  onAddToCart={() => {
+                  onAddToCart={async () => {
                     if (!isAuthenticated) {
                       showToast('Please log in to add items to your cart.', 'info');
                       navigate('/login');
                       return;
                     }
-                    addToCart(product, 1);
-                    showToast(`1 × ${product.name} added to cart!`, 'success');
+                    const success = await addToCart(product, 1);
+                    showToast(success ? `1 × ${product.name} added to cart!` : 'Could not add this item. Check stock and retry.', success ? 'success' : 'error');
                   }}
                 />
               ))}

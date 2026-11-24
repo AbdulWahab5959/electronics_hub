@@ -1,5 +1,5 @@
 // src/components/common/RatingStars.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Star } from '@phosphor-icons/react/dist/csr/Star';
 import { StarHalf } from '@phosphor-icons/react/dist/csr/StarHalf';
 
@@ -51,9 +51,11 @@ export const RatingStars = ({
 
   return (
     <div className="rating-stars-premium">
-      <div className="stars-row">
+      <div className="stars-row" role={readonly ? 'img' : undefined} aria-label={readonly ? `Rated ${Number(rating).toFixed(1)} out of 5` : undefined}>
         {stars.map((star) => (
-          <button
+          readonly ? <span key={star} aria-hidden="true" className="star-button" style={{ width: config.star, height: config.star }}><StarIcon type={getStarType(star)} /></span> : <button
+            type="button"
+            aria-label={`Rate ${star} out of 5`}
             key={star}
             className={`star-button ${!readonly ? 'interactive' : ''}`}
             onClick={() => handleClick(star)}
@@ -69,7 +71,7 @@ export const RatingStars = ({
       
       <div className="rating-info">
         {showAverage && rating > 0 && (
-          <span className="rating-average">{rating.toFixed(1)}</span>
+          <span className="rating-average">{Number(rating).toFixed(1)}</span>
         )}
         {showCount && totalReviews > 0 && (
           <span className="rating-total">

@@ -45,6 +45,22 @@ class CheckoutTest extends TestCase
                 'address' => 'Street 1', 'city' => 'Lahore', 'state' => 'Punjab', 'country' => 'PK']];
     }
 
+    public function test_invalid_delivery_phone_does_not_create_an_order_or_change_cart_and_stock(): void
+    {
+        $this->cart();
+        $payload = $this->payload();
+        foreach (['call me', '123', '0300abc1234', '+1234567890123456'] as $phone) {
+            $payload['shipping_address']['phone'] = $phone;
+            $this->postJson('/api/orders', $payload)->assertUnprocessable()->assertJsonValidationErrors('shipping_address.phone');
+        }
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('carts', 1);
+        $this->assertSame(3, $this->product->fresh()->stock);
+        $payload['shipping_address']['phone'] = '+92 (300) 123-4567';
+        $this->postJson('/api/orders', $payload)->assertCreated();
+        $this->assertDatabaseCount('orders', 1);
+    }
+
     public function test_quote_and_order_use_current_server_prices_and_exact_amounts(): void
     {
         $this->cart(2);
@@ -168,7 +184,13 @@ class CheckoutTest extends TestCase
         $order = $this->postJson('/api/orders', $this->payload())->assertCreated()->json('data');
         $this->getJson('/api/orders/track/'.$order['order_number'])->assertOk()
             ->assertJsonMissingPath('data.user')->assertJsonMissingPath('data.shipping_address')->assertJsonMissingPath('data.items');
-        $this->postJson('/api/orders/'.$order['id'].'/cancel')->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $cancelled = $this->postJson('/api/orders/'.$order['id'].'/cancel')->assertOk()
+            ->assertJsonPath('data.status', 'cancelled')->assertJsonPath('data.payment_status', 'cancelled')
+            ->assertJsonPath('data.total', $order['total'])->assertJsonPath('data.subtotal', $order['subtotal'])
+            ->assertJsonPath('data.items.0.name', 'Laptop')->assertJsonPath('data.items.0.price', '1250.55')
+            ->assertJsonPath('data.items.0.product.image', '/laptop.png')->assertJsonMissingPath('data.request_hash')->json('data');
+        $this->travel(1)->minutes();
+        $this->postJson('/api/orders/'.$order['id'].'/cancel')->assertOk()->assertJsonPath('data.updated_at', $cancelled['updated_at']);
         $this->postJson('/api/orders/'.$order['id'].'/cancel')->assertOk();
         $this->assertSame(3, $this->product->fresh()->stock);
         $other = User::create(['name' => 'Other', 'email' => 'other@example.test', 'password' => 'secure-password']);
@@ -213,5 +235,33 @@ class CheckoutTest extends TestCase
         Order::findOrFail($order['id'])->update(['status' => 'processing']);
         $this->postJson('/api/orders/'.$order['id'].'/cancel')->assertConflict();
         $this->assertSame(1, $this->product->fresh()->stock);
+    }
+
+    public function test_all_fulfillment_and_paid_states_block_cancellation_without_stock_changes(): void
+    {
+        $this->cart();
+        $order = $this->postJson('/api/orders', $this->payload())->assertCreated()->json('data');
+        foreach (['processing', 'shipped', 'delivered'] as $status) {
+            Order::findOrFail($order['id'])->update(['status' => $status]);
+            $this->postJson('/api/orders/'.$order['id'].'/cancel')->assertConflict();
+            $this->getJson('/api/orders/track/'.$order['order_number'])->assertOk()->assertJsonPath('data.status', $status);
+            $this->assertSame(2, $this->product->fresh()->stock);
+        }
+        Order::findOrFail($order['id'])->update(['status' => 'pending', 'payment_status' => 'paid']);
+        $this->postJson('/api/orders/'.$order['id'].'/cancel')->assertConflict();
+        $this->assertSame(2, $this->product->fresh()->stock);
+    }
+
+    public function test_order_list_ties_are_stable_and_order_snapshots_survive_product_changes(): void
+    {
+        $this->freezeTime();
+        $this->cart();
+        $first = $this->postJson('/api/orders', $this->payload())->assertCreated()->json('data');
+        $this->cart();
+        $second = $this->postJson('/api/orders', $this->payload())->assertCreated()->json('data');
+        $this->product->update(['price' => '9999.99', 'name' => 'Changed catalogue name']);
+        $this->getJson('/api/orders')->assertOk()->assertJsonPath('data.0.id', $second['id'])->assertJsonPath('data.1.id', $first['id']);
+        $this->getJson('/api/orders/number/'.$first['order_number'])->assertOk()
+            ->assertJsonPath('data.items.0.name', 'Laptop')->assertJsonPath('data.items.0.price', '1250.55')->assertJsonPath('data.total', $first['total']);
     }
 }
